@@ -1,0 +1,42 @@
+{
+  "name": "voxread",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit --noUnusedLocals --noUnusedParameters",
+    "check": "npm run typecheck && npm test && npm run build",
+    "cert": "bash scripts/gen-cert.sh",
+    "prepare-assets": "node scripts/gen-icons.mjs && npm run copy-pdf-assets",
+    "copy-pdf-assets": "rm -rf public/cmaps public/standard_fonts && cp -R node_modules/pdfjs-dist/cmaps public/cmaps && cp -R node_modules/pdfjs-dist/standard_fonts public/standard_fonts",
+    "make-test-pdf": "node scripts/make-test-pdf.mjs"
+  },
+  "dependencies": {
+    "antd-mobile": "^5.43.0",
+    "dexie": "^4.4.7",
+    "dexie-react-hooks": "^4.4.0",
+    "lucide-react": "^1.61.0",
+    "pdfjs-dist": "^6.4.299",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "react-router": "^8.5.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.5",
+    "vite-plugin-pwa": "^2.0.0",
+    "vitest": "^4.1.11"
+  }
+}

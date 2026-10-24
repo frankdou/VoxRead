@@ -1,0 +1,30 @@
+# 依赖
+node_modules
+
+# 构建产物
+dist
+dev-dist
+
+# 本地开发
+.cert
+*.local
+.env
+.env.*
+!.env.example
+
+# 测试（覆盖率输出；测试 PDF 由 scripts/make-test-pdf.mjs 按需生成）
+coverage
+test/fixtures
+public/sample-test.pdf
+
+# 日志
+*.log
+npm-debug.log*
+
+# 编辑器 / 系统
+.DS_Store
+._*
+.idea
+.vscode
+*.swp
+*.tsbuildinfo

@@ -1,0 +1,32 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+html {
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  @apply bg-slate-100 text-slate-900 antialiased dark:bg-slate-950 dark:text-slate-100;
+  overscroll-behavior-y: none;
+}
+
+.reader-text {
+  font-size: var(--reader-font-size, 18px);
+  line-height: 2;
+}
+
+/* 块顶部滚动时避开吸顶头部 */
+section[id^='chunk-'] {
+  scroll-margin-top: 60px;
+}
+
+/* iOS 在输入框字号 < 16px 聚焦时会自动放大整个页面（看起来像页面被撑开），强制 16px；
+   搜索框加高到 46px，触控更舒适 */
+.adm-search-bar {
+  --height: 46px;
+}
+.adm-search-bar .adm-input-element,
+.adm-input-element {
+  font-size: 16px !important;
+}
