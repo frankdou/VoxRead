@@ -70,7 +70,7 @@ export default function Bookshelf() {
         <div className="mx-auto flex max-w-2xl items-center gap-3 px-4 py-3">
           <h1 className="flex items-center gap-2 text-lg font-bold">
             <BookCopy size={22} aria-hidden="true" />
-            VoxRead<span className="ml-2 text-xs font-normal text-slate-400">书架</span>
+            VoxRead
           </h1>
           <div className="flex-1" />
           <button
