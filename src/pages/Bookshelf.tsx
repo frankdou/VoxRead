@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { BookOpenText, Plus, Search, Settings, X } from 'lucide-react'
+import { BookCopy, BookOpenText, Plus, Search, Settings, X } from 'lucide-react'
 import { repository, ImportError } from '../adapters/indexeddb'
 import type { BookMeta } from '../types'
 import BookCard from '../components/BookCard'
@@ -68,7 +68,8 @@ export default function Bookshelf() {
     <div className="min-h-dvh pb-28">
       <header className="sticky top-0 z-20 border-b border-slate-200 bg-slate-100/85 backdrop-blur dark:border-slate-800 dark:bg-slate-950/85">
         <div className="mx-auto flex max-w-2xl items-center gap-3 px-4 py-3">
-          <h1 className="text-lg font-bold">
+          <h1 className="flex items-center gap-2 text-lg font-bold">
+            <BookCopy size={22} aria-hidden="true" />
             VoxRead<span className="ml-2 text-xs font-normal text-slate-400">书架</span>
           </h1>
           <div className="flex-1" />

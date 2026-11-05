@@ -10,7 +10,7 @@ import { Link, useParams } from 'react-router'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { Toast } from 'antd-mobile'
 import {
-  ArrowLeft,
+  BookCopy,
   ChevronLeft,
   ChevronRight,
   ChevronUp,
@@ -825,7 +825,7 @@ export default function Reader() {
               aria-label="返回书架"
               className="flex h-9 w-9 items-center justify-center rounded-full active:bg-slate-200 dark:active:bg-slate-800"
             >
-              <ArrowLeft size={22} />
+              <BookCopy size={22} />
             </Link>
           </div>
           <div className="flex items-center rounded-full bg-slate-200/80 dark:bg-slate-800">
