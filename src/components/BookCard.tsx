@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { TriangleAlert, X } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { repository } from '../adapters/indexeddb'
 import { coverCacheKey, getCachedCover, makeCoverDataUrl, setCachedCover } from '../lib/cover'
 import type { BookMeta } from '../types'
@@ -15,6 +16,7 @@ interface Props {
 const migrating = new Set<string>()
 
 export default function BookCard({ book, onDelete }: Props) {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const progress = useLiveQuery(() => repository.getProgress(book.id), [book.id], null)
   const [coverUrl, setCoverUrl] = useState<string | null>(book.coverDataUrl ?? null)
@@ -90,15 +92,15 @@ export default function BookCard({ book, onDelete }: Props) {
       </button>
       {book.lowQuality && (
         <span
-          title="解析质量可能不佳（乱码或双栏），朗读体验可能受影响"
+          title={t('bookCard.qualityTitle')}
           className="absolute left-1.5 top-1.5 flex items-center gap-0.5 rounded-md bg-amber-500/90 px-1.5 py-0.5 text-[10px] text-white"
         >
           <TriangleAlert size={10} />
-          解析质量
+          {t('bookCard.qualityBadge')}
         </span>
       )}
       <button
-        aria-label="删除"
+        aria-label={t('bookCard.delete')}
         onClick={e => {
           e.stopPropagation()
           onDelete(book)

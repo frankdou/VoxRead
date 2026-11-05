@@ -9,6 +9,7 @@ import {
 import { Link, useParams } from 'react-router'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { Toast } from 'antd-mobile'
+import { useTranslation } from 'react-i18next'
 import {
   BookCopy,
   ChevronLeft,
@@ -26,7 +27,7 @@ import { shouldContinueReading, type JumpSource } from '../lib/jump'
 import { searchChunks, type SearchHit } from '../lib/search'
 import {
   detectBookLanguage,
-  languageLabel,
+  LANGUAGE_LABEL_KEYS,
   resolveBookVoice,
   type TextLang,
 } from '../lib/voices'
@@ -63,6 +64,8 @@ function groupByPara(text: string): { start: number; sentences: { text: string }
 
 export default function Reader() {
   const { bookId = '' } = useParams()
+  // JSX 用 t（随语言重渲染）；Toast/alert 在回调里用 i18n.t，取触发那一刻的语言
+  const { t, i18n } = useTranslation()
   const { settings, update } = useSettings()
   // undefined = 查询中；null = 书不存在（已被删除）
   const book = useLiveQuery(async () => (await repository.getBook(bookId)) ?? null, [bookId])
@@ -312,7 +315,9 @@ export default function Reader() {
     }
     if (fallback) {
       Toast.show({
-        content: `系统没有可用的${languageLabel(bookLang)}音色，已回退到通用音色`,
+        content: i18n.t('reader.voiceFallback', {
+          language: i18n.t(LANGUAGE_LABEL_KEYS[bookLang]),
+        }),
         duration: 3000,
       })
     }
@@ -341,7 +346,8 @@ export default function Reader() {
       },
       onEngineStall: () => {
         Toast.show({
-          content: '系统语音没有响应：请检查静音键和音量；若仍无声，请完全退出浏览器（上滑杀掉）后重新打开本页',
+          // 引擎回调可能在切换语言后才触发，必须此时取文案
+          content: i18n.t('reader.engineStall'),
           duration: 4000,
         })
       },
@@ -371,7 +377,7 @@ export default function Reader() {
 
   const togglePlay = () => {
     if (!window.speechSynthesis) {
-      window.alert('当前浏览器不支持语音合成')
+      window.alert(i18n.t('reader.unsupportedSpeech'))
       return
     }
     if (playing && !paused) {
@@ -394,7 +400,7 @@ export default function Reader() {
       // iOS 偶发：页面多次重载后系统音色列表被清空，朗读会静默失败
       if (window.speechSynthesis.getVoices().length === 0) {
         Toast.show({
-          content: '系统音色列表为空：请完全退出浏览器（上滑杀掉）后重新打开本页',
+          content: i18n.t('reader.emptyVoiceList'),
           duration: 3500,
         })
       }
@@ -796,7 +802,7 @@ export default function Reader() {
   if (book === undefined) {
     return (
       <div className="flex min-h-dvh items-center justify-center text-sm text-slate-400">
-        加载中…
+        {t('reader.loading')}
       </div>
     )
   }
@@ -804,12 +810,12 @@ export default function Reader() {
   if (book === null) {
     return (
       <div className="flex min-h-dvh flex-col items-center justify-center gap-4">
-        <p className="text-sm text-slate-400">这本书不存在或已被删除</p>
+        <p className="text-sm text-slate-400">{t('reader.missing')}</p>
         <Link
           to="/"
           className="rounded-full bg-indigo-600 px-5 py-2 text-sm text-white active:scale-95"
         >
-          返回书架
+          {t('reader.backToShelf')}
         </Link>
       </div>
     )
@@ -822,7 +828,7 @@ export default function Reader() {
           <div className="flex flex-1 items-center">
             <Link
               to="/"
-              aria-label="返回书架"
+              aria-label={t('reader.backToShelf')}
               className="flex h-9 w-9 items-center justify-center rounded-full active:bg-slate-200 dark:active:bg-slate-800"
             >
               <BookCopy size={22} />
@@ -832,14 +838,14 @@ export default function Reader() {
             <button
               onClick={() => jump(-1)}
               disabled={topSeq <= 0}
-              aria-label="上一段"
+              aria-label={t('reader.prevChunk')}
               className="flex h-8 w-8 items-center justify-center rounded-full active:bg-slate-300 disabled:opacity-30 dark:active:bg-slate-700"
             >
               <ChevronLeft size={18} />
             </button>
             <button
               onClick={() => setJumpOpen(true)}
-              aria-label="跳转到指定块"
+              aria-label={t('reader.jumpToChunk')}
               className="flex h-8 min-w-20 items-center justify-center rounded-full px-2 text-lg font-semibold tabular-nums text-slate-600 transition-colors active:bg-slate-300 dark:text-slate-300 dark:active:bg-slate-700"
             >
               {topSeq + 1} / {total}
@@ -847,7 +853,7 @@ export default function Reader() {
             <button
               onClick={() => jump(1)}
               disabled={topSeq >= total - 1}
-              aria-label="下一段"
+              aria-label={t('reader.nextChunk')}
               className="flex h-8 w-8 items-center justify-center rounded-full active:bg-slate-300 disabled:opacity-30 dark:active:bg-slate-700"
             >
               <ChevronRight size={18} />
@@ -856,13 +862,13 @@ export default function Reader() {
           <div className="flex flex-1 items-center justify-end gap-1">
             <button
               onClick={() => setSearchOpen(true)}
-              aria-label="全文搜索"
+              aria-label={t('reader.search')}
               className="flex h-9 w-9 items-center justify-center rounded-full active:bg-slate-200 dark:active:bg-slate-800"
             >
               <Search size={20} />
             </button>
             {book.lowQuality && (
-              <TriangleAlert size={16} className="text-amber-500" aria-label="解析质量可能不佳" />
+              <TriangleAlert size={16} className="text-amber-500" aria-label={t('reader.lowQuality')} />
             )}
           </div>
         </div>
@@ -881,7 +887,7 @@ export default function Reader() {
             className="mx-auto mb-6 flex items-center gap-1 rounded-full bg-slate-200 px-4 py-1.5 text-xs dark:bg-slate-800"
           >
             <ChevronUp size={14} />
-            载入上文
+            {t('reader.loadEarlier')}
           </button>
         )}
         {visibleSeqs.map(s => {
@@ -919,18 +925,18 @@ export default function Reader() {
         })}
         <div ref={bottomRef} />
         {vis && vis.end >= total && total > 0 && (
-          <p className="mt-10 text-center text-sm text-slate-400">—— 全书完 ——</p>
+          <p className="mt-10 text-center text-sm text-slate-400">{t('reader.endOfBook')}</p>
         )}
       </main>
 
       {!atCurrent && total > 0 && (
         <button
           onClick={locateCurrent}
-          aria-label="定位到当前句"
+          aria-label={t('reader.locateCurrent')}
           className="fixed right-4 bottom-[calc(6rem+env(safe-area-inset-bottom))] z-20 flex h-10 items-center gap-1.5 rounded-full bg-indigo-600/95 px-3.5 text-xs font-medium text-white shadow-lg shadow-indigo-600/30 backdrop-blur active:scale-95"
         >
           <LocateFixed size={16} />
-          当前句
+          {t('reader.currentSentence')}
         </button>
       )}
 
