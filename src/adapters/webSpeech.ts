@@ -98,8 +98,15 @@ export class WebSpeechEngine implements SpeechEngine {
   }
 
   setOptions(opts: SpeakOptions) {
-    const changed = opts.voiceURI !== this.opts.voiceURI || opts.rate !== this.opts.rate
+    const voiceChanged = opts.voiceURI !== this.opts.voiceURI
+    const changed = voiceChanged || opts.rate !== this.opts.rate
     this.opts = opts
+    if (voiceChanged) {
+      // 换音色时必须同步刷新 selected，否则续读仍用 speakChunk 时的旧音色（要等到下一块才生效）
+      const all = window.speechSynthesis.getVoices()
+      this.available = pickSupportedVoices(all)
+      this.selected = all.find(x => x.voiceURI === opts.voiceURI) ?? null
+    }
     if (this.state === 'playing' && changed) {
       // iOS 上排队中的旧音色 utterance 不会变，取消后用新音色立即重读当前段
       this.gen++
@@ -130,6 +137,7 @@ export class WebSpeechEngine implements SpeechEngine {
     }, 400)
   }
 
+  /** 同步停止并清空队列；可重复调用（幂等） */
   stop() {
     this.halt()
   }
@@ -296,6 +304,9 @@ export class WebSpeechEngine implements SpeechEngine {
   private halt() {
     this.state = 'idle'
     this.gen++
+    // 停止后试听结束的"自动恢复朗读"回调也必须失效，否则离开页面时会被 stopPreview 重新开口
+    this.previewActive = false
+    this.previewWasPlaying = false
     this.stopKeepAlive()
     this.clearWatchdog()
     window.speechSynthesis.cancel()
