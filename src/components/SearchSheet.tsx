@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Popup, SearchBar } from 'antd-mobile'
 import { useTranslation } from 'react-i18next'
 import type { SearchHit } from '../lib/search'
+import { useVisualViewport } from '../hooks/useVisualViewport'
 
 interface Props {
   open: boolean
@@ -16,6 +17,10 @@ export default function SearchSheet({ open, onClose, onSearch, onSelect }: Props
   const [hits, setHits] = useState<SearchHit[] | null>(null)
   const [busy, setBusy] = useState(false)
   const timer = useRef<number | undefined>(undefined)
+  // iOS 键盘弹起时布局视口不缩、只把视觉视口上移，固定定位的面板会被顶出屏幕
+  const { offsetTop, height, layoutHeight } = useVisualViewport(open)
+  // 键盘弹起时用可视区剩余高度，否则沿用原来的 62% 高度
+  const maxHeight = Math.round(height < layoutHeight ? height : height * 0.62)
 
   // 结果与关键词跨开关保留，直到新查询替换（关闭面板不清空）
   useEffect(() => {
@@ -46,9 +51,14 @@ export default function SearchSheet({ open, onClose, onSearch, onSelect }: Props
       position="top"
       destroyOnClose
       onClose={onClose}
-      bodyStyle={{ borderBottomLeftRadius: 16, borderBottomRightRadius: 16 }}
+      bodyStyle={{
+        borderBottomLeftRadius: 16,
+        borderBottomRightRadius: 16,
+        // 锚到视觉视口顶部，避免键盘弹起时面板被整体上移出屏幕
+        top: offsetTop,
+      }}
     >
-      <div className="flex max-h-[62vh] flex-col overflow-hidden pt-2">
+      <div className="flex min-h-0 flex-col overflow-hidden pt-2" style={{ maxHeight }}>
         <div className="px-3 pb-1">
           <SearchBar
             value={query}
