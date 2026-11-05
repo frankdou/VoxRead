@@ -179,11 +179,7 @@ export default function Bookshelf() {
         </div>
       )}
 
-      <SettingsSheet
-        open={settingsOpen}
-        onClose={() => setSettingsOpen(false)}
-        onMessage={msg => setNotice({ msg, kind: 'info' })}
-      />
+      <SettingsSheet open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </div>
   )
 }

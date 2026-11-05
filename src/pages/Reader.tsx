@@ -14,6 +14,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronUp,
+  LocateFixed,
   Search,
   TriangleAlert,
 } from 'lucide-react'
@@ -26,6 +27,7 @@ import { searchChunks, type SearchHit } from '../lib/search'
 import { useSettings } from '../store/settings'
 import PlayerBar from '../components/PlayerBar'
 import SettingsSheet from '../components/SettingsSheet'
+import VoiceSheet from '../components/VoiceSheet'
 import SearchSheet from '../components/SearchSheet'
 import PageJumpSheet from '../components/PageJumpSheet'
 
@@ -55,7 +57,7 @@ function groupByPara(text: string): { start: number; sentences: { text: string }
 
 export default function Reader() {
   const { bookId = '' } = useParams()
-  const { settings, update } = useSettings()
+  const { settings } = useSettings()
   // undefined = 查询中；null = 书不存在（已被删除）
   const book = useLiveQuery(async () => (await repository.getBook(bookId)) ?? null, [bookId])
   const progress = useLiveQuery(() => repository.getProgress(bookId), [bookId])
@@ -67,6 +69,7 @@ export default function Reader() {
   const [playing, setPlaying] = useState(false)
   const [paused, setPaused] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [voiceOpen, setVoiceOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
   const [jumpOpen, setJumpOpen] = useState(false)
   /** 进度初始化完成标志：可见窗口必须等它，否则会在进度加载前用第 0 块抢先初始化（进书停在第一页的根因） */
@@ -75,6 +78,10 @@ export default function Reader() {
   const [flashSent, setFlashSent] = useState<{ seq: number; idx: number } | null>(null)
   const flashSentRef = useRef<{ seq: number; idx: number } | null>(null)
   const [vis, setVis] = useState<{ start: number; end: number } | null>(null)
+  /** 系统音色列表（播放栏展示当前音色名用；iOS 上会异步到达） */
+  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([])
+  /** 当前朗读句是否在视口内：用于在用户滚离后显示"回到当前句"锚点 */
+  const [atCurrent, setAtCurrent] = useState(true)
 
   const seqRef = useRef(0)
   const sentIdxRef = useRef(0)
@@ -232,6 +239,20 @@ export default function Reader() {
   useEffect(() => {
     speechEngine.setOptions(speakOpts)
   }, [speakOpts])
+
+  useEffect(() => {
+    const synth = window.speechSynthesis
+    if (!synth) return
+    const refresh = () => setVoices(speechEngine.getVoices())
+    refresh()
+    synth.addEventListener('voiceschanged', refresh)
+    return () => synth.removeEventListener('voiceschanged', refresh)
+  }, [])
+
+  const voiceName = useMemo(
+    () => voices.find(v => v.voiceURI === settings.voiceURI)?.name ?? null,
+    [voices, settings.voiceURI],
+  )
 
   const playFromRef = useRef<(s: number, i: number, fromGesture?: boolean) => void>(() => {})
   playFromRef.current = (s: number, startIdx: number, fromGesture = false) => {
@@ -471,6 +492,40 @@ export default function Reader() {
     playFromRef.current(s, idx, true)
   }
 
+  // 快速回到当前朗读句：把所在块拉回渲染窗口并滚动居中，短暂高亮便于确认
+  const locateCurrent = () => {
+    if (!total) return
+    // 用户主动找回朗读位置：恢复自动跟随
+    followRef.current = true
+    const s = seqRef.current
+    const i = sentIdxRef.current
+    if (!chunksRef.current.has(s)) ensureChunks(s, 1)
+    setVis(v =>
+      v && s >= v.start && s < v.end
+        ? v
+        : { start: Math.max(0, s - BEFORE), end: Math.min(total, s + AFTER + 1) },
+    )
+    const target = { seq: s, idx: i }
+    flashSentRef.current = target
+    setFlashSent(target)
+    // 回到朗读位置时断点仍应停在当前句，而不是滚动后视口顶部的句子
+    topSeqRef.current = s
+    topSentRef.current = i
+    setTopSeq(s)
+    suppressScrollSampling()
+    // 目标块可能尚未渲染，短暂重试直到出现
+    let tries = 0
+    const tryScroll = () => {
+      const el = document.getElementById(`sent-${s}-${i}`)
+      if (el) {
+        el.scrollIntoView({ block: 'center' })
+        return
+      }
+      if (++tries < 8) window.setTimeout(tryScroll, 60)
+    }
+    tryScroll()
+  }
+
   // 离开阅读页 / 切后台：先落盘，再同步且幂等地停止朗读与所有待续读任务
   const flushPositionRef = useRef<() => void>(() => {})
   flushPositionRef.current = () => {
@@ -594,6 +649,42 @@ export default function Reader() {
     return () => window.clearTimeout(t)
   }, [seq, sentIdx, playing, paused, chunks, vis])
 
+  // 当前朗读句是否在视口内：用户滚离后显示"回到当前句"锚点；跨块渲染空窗延迟确认，避免按钮闪烁
+  useEffect(() => {
+    if (!initialized) {
+      setAtCurrent(true)
+      return
+    }
+    let raf = 0
+    let showTimer = 0
+    const measure = () => {
+      raf = 0
+      const el = document.getElementById(`sent-${seqRef.current}-${sentIdxRef.current}`)
+      if (!el) {
+        if (!showTimer) showTimer = window.setTimeout(() => setAtCurrent(false), 250)
+        return
+      }
+      if (showTimer) {
+        window.clearTimeout(showTimer)
+        showTimer = 0
+      }
+      const r = el.getBoundingClientRect()
+      setAtCurrent(r.bottom > 56 && r.top < window.innerHeight - 96)
+    }
+    const schedule = () => {
+      if (!raf) raf = window.requestAnimationFrame(measure)
+    }
+    measure()
+    window.addEventListener('scroll', schedule, { passive: true })
+    window.addEventListener('resize', schedule)
+    return () => {
+      window.removeEventListener('scroll', schedule)
+      window.removeEventListener('resize', schedule)
+      if (raf) window.cancelAnimationFrame(raf)
+      if (showTimer) window.clearTimeout(showTimer)
+    }
+  }, [initialized, seq, sentIdx, chunks, vis])
+
   // 向下滚动到底部哨兵时追加渲染
   const bottomRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
@@ -679,7 +770,7 @@ export default function Reader() {
             <button
               onClick={() => setJumpOpen(true)}
               aria-label="跳转到指定块"
-              className="min-w-14 rounded-full px-1 text-center text-xs tabular-nums text-slate-600 dark:text-slate-300"
+              className="flex h-8 min-w-20 items-center justify-center rounded-full px-2 text-lg font-semibold tabular-nums text-slate-600 transition-colors active:bg-slate-300 dark:text-slate-300 dark:active:bg-slate-700"
             >
               {topSeq + 1} / {total}
             </button>
@@ -731,7 +822,8 @@ export default function Reader() {
                 <p key={pi} className="mb-4 [text-indent:2em]">
                   {para.sentences.map((sen, si) => {
                     const idx = para.start + si
-                    const active = s === seq && idx === sentIdx && playing
+                    // 当前朗读句始终高亮（播放、暂停、重进书本时都能看出读到哪一句）
+                    const active = s === seq && idx === sentIdx
                     const flashing = flashSent !== null && flashSent.seq === s && flashSent.idx === idx
                     return (
                       <span
@@ -761,19 +853,27 @@ export default function Reader() {
         )}
       </main>
 
+      {!atCurrent && total > 0 && (
+        <button
+          onClick={locateCurrent}
+          aria-label="定位到当前句"
+          className="fixed right-4 bottom-[calc(6rem+env(safe-area-inset-bottom))] z-20 flex h-10 items-center gap-1.5 rounded-full bg-indigo-600/95 px-3.5 text-xs font-medium text-white shadow-lg shadow-indigo-600/30 backdrop-blur active:scale-95"
+        >
+          <LocateFixed size={16} />
+          当前句
+        </button>
+      )}
+
       <PlayerBar
         playing={playing}
         paused={paused}
-        rate={settings.rate}
+        voiceName={voiceName}
         onToggle={togglePlay}
-        onRate={() => {
-          const RATES = [0.75, 1, 1.25, 1.5, 2]
-          const i = RATES.findIndex(r => Math.abs(r - settings.rate) < 0.01)
-          update({ rate: RATES[(i + 1 + RATES.length) % RATES.length] })
-        }}
+        onVoice={() => setVoiceOpen(true)}
         onSettings={() => setSettingsOpen(true)}
       />
       <SettingsSheet open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <VoiceSheet open={voiceOpen} onClose={() => setVoiceOpen(false)} voices={voices} />
       <SearchSheet
         open={searchOpen}
         onClose={() => setSearchOpen(false)}

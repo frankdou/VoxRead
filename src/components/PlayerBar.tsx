@@ -1,20 +1,21 @@
-import { Pause, Play, Settings } from 'lucide-react'
+import { AudioLines, Pause, Play, Settings } from 'lucide-react'
 
 interface Props {
   playing: boolean
   paused: boolean
-  rate: number
+  /** 当前音色名（未选择/未加载时为空） */
+  voiceName: string | null
   onToggle: () => void
-  onRate: () => void
+  onVoice: () => void
   onSettings: () => void
 }
 
 export default function PlayerBar({
   playing,
   paused,
-  rate,
+  voiceName,
   onToggle,
-  onRate,
+  onVoice,
   onSettings,
 }: Props) {
   return (
@@ -22,7 +23,7 @@ export default function PlayerBar({
       className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white/90 backdrop-blur dark:border-slate-800 dark:bg-slate-900/90"
       style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
     >
-      <div className="mx-auto flex max-w-prose items-center gap-2 px-4 py-2.5">
+      <div className="mx-auto flex max-w-prose items-center gap-4 px-4 py-2.5">
         <button
           onClick={onToggle}
           aria-label={playing && !paused ? '暂停' : '播放'}
@@ -32,11 +33,12 @@ export default function PlayerBar({
         </button>
         <div className="flex-1" />
         <button
-          onClick={() => onRate()}
-          aria-label="语速"
-          className="flex h-9 min-w-14 items-center justify-center rounded-full bg-slate-100 px-2 text-sm font-medium tabular-nums dark:bg-slate-800"
+          onClick={onVoice}
+          aria-label="切换音色"
+          className="flex h-9 max-w-24 items-center gap-1 rounded-full bg-slate-100 px-2.5 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300"
         >
-          {rate}×
+          <AudioLines size={15} className="shrink-0" />
+          <span className="truncate">{voiceName ?? '音色'}</span>
         </button>
         <button
           onClick={onSettings}

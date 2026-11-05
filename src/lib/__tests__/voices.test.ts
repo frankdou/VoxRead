@@ -58,18 +58,40 @@ describe('pickSupportedVoices', () => {
     expect(out.map(v => v.name)).toEqual(['Xishi'])
   })
 
-  it('过滤 iOS 趣味/特效音色与老式机器人音色，保留正常人声', () => {
+  it('过滤 iOS 趣味/特效音色、老式机器人音色与 Novelty 含糊音色，保留正常人声', () => {
     const out = pickSupportedVoices([
       voice('en-US', 'Albert'),
       voice('en-US', 'Zarvox'),
       voice('en-US', 'Bahh'),
       voice('en-US', 'Fred'),
       voice('en-US', 'Eddy (English (United States))'),
+      voice('en-US', 'Flo (英语（美国）)'),
+      voice('en-US', 'Grandma (英语（美国）)'),
+      voice('en-US', 'Grandpa (英语（美国）)'),
+      voice('en-US', 'Reed (英语（美国）)'),
+      voice('en-US', 'Rocko (英语（美国）)'),
+      voice('en-US', 'Sandy (英语（美国）)'),
+      voice('en-US', 'Shelley (英语（美国）)'),
       voice('en-US', 'Samantha'),
       voice('en-GB', 'Daniel'),
     ])
     // 同组内按名称排序
     expect(out.map(v => v.name)).toEqual(['Daniel', 'Samantha'])
+  })
+
+  it('中文列表不被 Novelty 音色挤占，保留正常中文人声', () => {
+    const out = pickSupportedVoices([
+      voice('zh-CN', 'Eddy (中文（中国大陆）)'),
+      voice('zh-CN', 'Flo (中文（中国大陆）)'),
+      voice('zh-CN', 'Grandma (中文（中国大陆）)'),
+      voice('zh-CN', 'Grandpa (中文（中国大陆）)'),
+      voice('zh-CN', 'Reed (中文（中国大陆）)'),
+      voice('zh-CN', 'Rocko (中文（中国大陆）)'),
+      voice('zh-CN', 'Sandy (中文（中国大陆）)'),
+      voice('zh-CN', 'Shelley (中文（中国大陆）)'),
+      voice('zh-CN', 'Tingting'),
+    ])
+    expect(out.map(v => v.name)).toEqual(['Tingting'])
   })
 
   it('Enhanced/Premium 高品质音色排在普通音色前面', () => {

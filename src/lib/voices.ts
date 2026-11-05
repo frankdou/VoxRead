@@ -8,9 +8,20 @@ export const LANGUAGE_GROUPS = [
 /** 每个语言组最多展示的音色数 */
 export const MAX_VOICES_PER_LANG = 5
 
+/** 各语言的试听文案：试听强制用点选的音色，文案必须与音色语言一致才能真实试出效果 */
+export const VOICE_PREVIEW_TEXT: Record<string, string> = {
+  中文: '你好，我是你的专属读书声。翻开一本书，就像推开一扇窗，让故事自己走进来。',
+  English: "Hello, I'm your reading voice. Open a book, and let the story carry you away.",
+  日本語: 'こんにちは、私があなたの読み上げの声です。物語の世界へご案内します。',
+}
+
+/** 音色语言无法归组时的兜底试听文案 */
+export const FALLBACK_PREVIEW_TEXT = VOICE_PREVIEW_TEXT['中文']
+
 /**
  * iOS 系统自带的趣味/特效音色与老式机器人音色（不是正常人的声音），按名称（去括号后缀后）过滤：
- * Albert/Zarvox/Bahh/Bells/Boing/Bubbles/Cellos/organ 等是特效音，Fred/Junior/Kathy/Ralph 是 90 年代机器人音
+ * Albert/Zarvox/Bahh/Bells/Boing/Bubbles/Cellos/organ 等是特效音，Fred/Junior/Kathy/Ralph 是 90 年代机器人音；
+ * Eddy/Flo/Grandma/Grandpa/Reed/Rocko/Sandy/Shelley 是 iOS 15 起的 "Novelty" 合成音色，发音含糊不清
  */
 const NON_HUMAN_VOICES = new Set([
   'albert',
@@ -32,8 +43,15 @@ const NON_HUMAN_VOICES = new Set([
   'wobble',
   'zarvox',
   'fred',
-  'eddy',
   'ding',
+  'eddy',
+  'flo',
+  'grandma',
+  'grandpa',
+  'reed',
+  'rocko',
+  'sandy',
+  'shelley',
 ])
 
 /** 高品质音色（iOS 增强版/高级版）名称特征 */
