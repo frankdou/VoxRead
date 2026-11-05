@@ -1,0 +1,103 @@
+/** 日本語 */
+const ja = {
+  meta: {
+    title: 'VoxRead · オーディオブック',
+  },
+  common: {
+    close: '閉じる',
+  },
+  bookshelf: {
+    searchPlaceholder: '書名を検索',
+    notPdf: '{{file}}：PDF ファイルではありません',
+    imported: '「{{name}}」をインポートしました',
+    importFailed: 'インポートに失敗しました。もう一度お試しください',
+    importDetail: '{{file}}：{{message}}',
+    deleteConfirm: '「{{title}}」を削除しますか？本文と読書位置も削除されます。',
+    deleted: '「{{title}}」を削除しました',
+    emptyTitle: '本棚はまだ空です',
+    emptyHint: '右下の + から PDF をアップロードして始めましょう',
+    iosTitle: 'VoxRead をホーム画面に追加することをおすすめします',
+    iosBody:
+      'Safari 下部の共有ボタン →「ホーム画面に追加」。未インストールのサイトは iOS では 7 日間アクセスしないとデータが消去されます（本が失われます）。また、読み上げの前に「設定 → アクセシビリティ → 読み上げコンテンツ → 声」から高品質の音声をダウンロードしてください。',
+    uploadPdf: 'PDF をアップロード',
+    importing: '解析中',
+    dismissError: 'エラー通知を閉じる',
+  },
+  language: {
+    zhHans: '简体中文',
+    zhHant: '繁體中文',
+    ja: '日本語',
+    ko: '한국어',
+    en: 'English',
+  },
+  settings: {
+    title: '設定',
+    rate: '再生速度',
+    fontSize: '文字サイズ',
+    theme: 'テーマ',
+    themeLight: 'ライト',
+    themeDark: 'ダーク',
+    data: 'データ',
+    storageUsage: 'ローカルストレージ使用量 {{usage}} / 空き容量 約 {{quota}}',
+    language: '言語',
+  },
+  player: {
+    play: '再生',
+    pause: '一時停止',
+    voice: '音声を変更',
+    settings: '設定',
+    voiceFallback: '音声',
+  },
+  bookCard: {
+    qualityTitle: '解析品質が低い可能性があります（文字化けや段組み）。読み上げ品質に影響することがあります',
+    qualityBadge: '品質',
+    delete: '削除',
+  },
+  voice: {
+    title: '音声',
+    hint: '選択するとすぐに反映されます。パネルの開閉は再生中の読み上げに影響しません',
+    empty: 'システム音声が見つかりません（ブラウザによっては読み上げの実行や音声パックのダウンロードが必要です）',
+    noLanguageVoice: '{{language}}の音声が利用できないため、利用可能なすべての音声を表示しています',
+    preview: '試聴',
+    local: 'ローカル',
+    online: 'オンライン',
+    langZh: '中国語',
+    langEn: '英語',
+    langJa: '日本語',
+  },
+  search: {
+    placeholder: '検索する文字を入力（空白と句読点は無視されます）',
+    cancel: 'キャンセル',
+    busy: '検索中…',
+    hint: '本書の全文から任意の文字を検索し、結果をタップするとその場所へ移動します',
+    empty: '一致する内容が見つかりません',
+    blockPrefix: 'ブロック{{index}}',
+  },
+  jump: {
+    title: 'ブロックへ移動',
+    subtitle: '全 {{total}} ブロック · ブロックをタップで移動（明るい色 = 既読）',
+    end: '最後まで到達しました',
+  },
+  reader: {
+    loading: '読み込み中…',
+    missing: 'この本は存在しないか、削除されています',
+    backToShelf: '本棚に戻る',
+    prevChunk: '前のブロック',
+    nextChunk: '次のブロック',
+    jumpToChunk: '指定ブロックへ移動',
+    search: '全文検索',
+    lowQuality: '解析品質が低い可能性があります',
+    loadEarlier: '前の本文を読み込む',
+    endOfBook: '—— 全文おわり ——',
+    locateCurrent: '現在の文へ移動',
+    currentSentence: '現在の文',
+    voiceFallback: '{{language}}の音声が利用できないため、汎用音声に切り替えました',
+    engineStall:
+      'システム音声が応答しません。消音スイッチと音量を確認してください。それでも無音の場合は、ブラウザを完全に終了（上スワイプで終了）してこのページを開き直してください',
+    unsupportedSpeech: 'このブラウザは音声合成に対応していません',
+    emptyVoiceList:
+      'システム音声の一覧が空です。ブラウザを完全に終了（上スワイプで終了）してこのページを開き直してください',
+  },
+}
+
+export default ja

@@ -8,6 +8,7 @@ import {
   pickSupportedVoices,
   resolveBookVoice,
   resolveUtteranceVoice,
+  voiceGroupCode,
   voiceGroupLabel,
 } from '../voices'
 
@@ -110,6 +111,20 @@ describe('pickSupportedVoices', () => {
 
   it('空列表返回空', () => {
     expect(pickSupportedVoices([])).toEqual([])
+  })
+})
+
+describe('voiceGroupCode', () => {
+  it('返回内部语言 code（与显示文案无关）', () => {
+    expect(voiceGroupCode('zh-CN')).toBe('zh')
+    expect(voiceGroupCode('cmn-Hans-CN')).toBe('zh')
+    expect(voiceGroupCode('EN-us')).toBe('en')
+    expect(voiceGroupCode('ja-JP')).toBe('ja')
+  })
+
+  it('不支持的语言返回 null', () => {
+    expect(voiceGroupCode('ko-KR')).toBeNull()
+    expect(voiceGroupCode('yue-HK')).toBeNull()
   })
 })
 

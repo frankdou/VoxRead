@@ -1,25 +1,32 @@
 /** 应用支持的三类朗读语言 */
 export type TextLang = 'zh' | 'en' | 'ja'
 
+/** 语言组显示名对应的 i18n key（显示与内部匹配彻底分离） */
+export const LANGUAGE_LABEL_KEYS = {
+  zh: 'voice.langZh',
+  en: 'voice.langEn',
+  ja: 'voice.langJa',
+} as const
+
 /** 应用支持的朗读语言：中文（普通话）、英文、日语（粤语及其他语言的系统音色一律不列出） */
 export const LANGUAGE_GROUPS = [
-  { rank: 0, label: '中文', code: 'zh' as TextLang, test: /^(zh|cmn)/ },
-  { rank: 1, label: 'English', code: 'en' as TextLang, test: /^en/ },
-  { rank: 2, label: '日本語', code: 'ja' as TextLang, test: /^ja/ },
+  { rank: 0, code: 'zh' as TextLang, labelKey: LANGUAGE_LABEL_KEYS.zh, test: /^(zh|cmn)/ },
+  { rank: 1, code: 'en' as TextLang, labelKey: LANGUAGE_LABEL_KEYS.en, test: /^en/ },
+  { rank: 2, code: 'ja' as TextLang, labelKey: LANGUAGE_LABEL_KEYS.ja, test: /^ja/ },
 ] as const
 
 /** 每个语言组最多展示的音色数 */
 export const MAX_VOICES_PER_LANG = 5
 
-/** 各语言的试听文案：试听强制用点选的音色，文案必须与音色语言一致才能真实试出效果 */
-export const VOICE_PREVIEW_TEXT: Record<string, string> = {
-  中文: '你好，我是你的专属读书声。翻开一本书，就像推开一扇窗，让故事自己走进来。',
-  English: "Hello, I'm your reading voice. Open a book, and let the story carry you away.",
-  日本語: 'こんにちは、私があなたの読み上げの声です。物語の世界へご案内します。',
+/** 各语言的试听文案（按内部语言 code 索引）：试听强制用点选的音色，文案必须与音色语言一致才能真实试出效果 */
+export const VOICE_PREVIEW_TEXT: Record<TextLang, string> = {
+  zh: '你好，我是你的专属读书声。翻开一本书，就像推开一扇窗，让故事自己走进来。',
+  en: "Hello, I'm your reading voice. Open a book, and let the story carry you away.",
+  ja: 'こんにちは、私があなたの読み上げの声です。物語の世界へご案内します。',
 }
 
 /** 音色语言无法归组时的兜底试听文案 */
-export const FALLBACK_PREVIEW_TEXT = VOICE_PREVIEW_TEXT['中文']
+export const FALLBACK_PREVIEW_TEXT = VOICE_PREVIEW_TEXT.zh
 
 /**
  * iOS 系统自带的趣味/特效音色与老式机器人音色（不是正常人的声音），按名称（去括号后缀后）过滤：
@@ -99,15 +106,28 @@ export function pickSupportedVoices<T extends VoiceLike>(voices: T[]): T[] {
   return kept
 }
 
+/** 音色所属语言组的内部 code（不支持的返回 null）；音色过滤/默认选择一律用它，避免依赖显示文案 */
+export function voiceGroupCode(lang: string): TextLang | null {
+  const l = lang.toLowerCase()
+  return LANGUAGE_GROUPS.find(g => g.test.test(l))?.code ?? null
+}
+
+/** 语言组的旧版展示名（Reader 第二批抽取前仍在使用；新 UI 请用 t(labelKey)） */
+const LANGUAGE_LABELS: Record<TextLang, string> = {
+  zh: '中文',
+  en: 'English',
+  ja: '日本語',
+}
+
 /** 音色所属语言组的展示名（不支持的返回 null） */
 export function voiceGroupLabel(lang: string): string | null {
-  const l = lang.toLowerCase()
-  return LANGUAGE_GROUPS.find(g => g.test.test(l))?.label ?? null
+  const code = voiceGroupCode(lang)
+  return code ? LANGUAGE_LABELS[code] : null
 }
 
 /** 语言 → 展示名（如 zh → 中文） */
 export function languageLabel(lang: TextLang): string {
-  return LANGUAGE_GROUPS.find(g => g.code === lang)?.label ?? ''
+  return LANGUAGE_LABELS[lang]
 }
 
 /** PDF / 系统语言标签（如 zh-CN、cmn-Hans）→ 应用支持的语言 */
@@ -156,8 +176,7 @@ function normalizeVoiceName(name: string): string {
 
 /** 按书籍语言挑默认音色；该语言没有任何可用音色时返回 null（由调用方回退通用音色） */
 export function pickDefaultVoiceForLang<T extends VoiceLike>(lang: TextLang, voices: T[]): T | null {
-  const label = languageLabel(lang)
-  const ofLang = voices.filter(v => voiceGroupLabel(v.lang) === label)
+  const ofLang = voices.filter(v => voiceGroupCode(v.lang) === lang)
   if (ofLang.length === 0) return null
   for (const preferred of DEFAULT_VOICE_NAMES[lang]) {
     const key = normalizeVoiceName(preferred)
@@ -185,11 +204,10 @@ export function resolveBookVoice(
   voices: VoiceLike[],
   currentVoiceURI: string | null = null,
 ): BookVoiceChoice {
-  const label = languageLabel(bookLang)
-  const languageVoices = voices.filter(v => voiceGroupLabel(v.lang) === label)
+  const languageVoices = voices.filter(v => voiceGroupCode(v.lang) === bookLang)
   const manual = bookVoiceURI ? voices.find(v => v.voiceURI === bookVoiceURI) : null
   // 本书有该语言音色时，只认可语言匹配的手动选择；没有该语言音色时，用户任选的回退音色也保留
-  if (manual && (languageVoices.length === 0 || voiceGroupLabel(manual.lang) === label)) {
+  if (manual && (languageVoices.length === 0 || voiceGroupCode(manual.lang) === bookLang)) {
     return { voice: manual, fallback: false }
   }
   if (languageVoices.length > 0) {
@@ -236,10 +254,9 @@ export function resolveUtteranceVoice(
   available: VoiceLike[],
 ): ResolvedVoice {
   const tl = detectTextLang(text) ?? 'zh'
-  const group = voiceGroupLabel(DEFAULT_LANG[tl])
-  if (selected && voiceGroupLabel(selected.lang) === group) {
+  if (selected && voiceGroupCode(selected.lang) === tl) {
     return { voice: selected, lang: selected.lang }
   }
-  const fallback = available.find(v => voiceGroupLabel(v.lang) === group) ?? null
+  const fallback = available.find(v => voiceGroupCode(v.lang) === tl) ?? null
   return { voice: fallback, lang: fallback?.lang ?? DEFAULT_LANG[tl] }
 }

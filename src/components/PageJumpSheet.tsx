@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Popup } from 'antd-mobile'
 import { X } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { useKeyboardOverlap } from '../hooks/useKeyboardOverlap'
 
 interface Props {
@@ -15,6 +16,7 @@ interface Props {
 const STEP = 120
 
 export default function PageJumpSheet({ open, total, current, onClose, onJump }: Props) {
+  const { t } = useTranslation()
   const [count, setCount] = useState(STEP)
   const gridRef = useRef<HTMLDivElement>(null)
   const sentinelRef = useRef<HTMLDivElement>(null)
@@ -28,12 +30,12 @@ export default function PageJumpSheet({ open, total, current, onClose, onJump }:
   // 打开时滚动到当前块
   useEffect(() => {
     if (!open) return
-    const t = window.setTimeout(() => {
+    const timer = window.setTimeout(() => {
       gridRef.current
         ?.querySelector(`[data-chunk="${current}"]`)
         ?.scrollIntoView({ block: 'center' })
     }, 150)
-    return () => window.clearTimeout(t)
+    return () => window.clearTimeout(timer)
   }, [open, current])
 
   // 滚动到底部哨兵时追加渲染更多方块
@@ -78,12 +80,12 @@ export default function PageJumpSheet({ open, total, current, onClose, onJump }:
       <div className="px-5 pb-[calc(env(safe-area-inset-bottom)+12px)] pt-3.5">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-base font-semibold">跳转到块</p>
+            <p className="text-base font-semibold">{t('jump.title')}</p>
             <p className="mt-0.5 text-xs text-slate-400">
-              共 {total} 块 · 点击方块直达（浅色 = 已读）
+              {t('jump.subtitle', { total })}
             </p>
           </div>
-          <button onClick={onClose} aria-label="关闭" className="text-slate-400">
+          <button onClick={onClose} aria-label={t('common.close')} className="text-slate-400">
             <X size={20} />
           </button>
         </div>
@@ -100,7 +102,7 @@ export default function PageJumpSheet({ open, total, current, onClose, onJump }:
           </div>
           {count < total && <div ref={sentinelRef} className="h-10" />}
           {count >= total && total > 0 && (
-            <p className="py-3 text-center text-xs text-slate-400">已经到底啦</p>
+            <p className="py-3 text-center text-xs text-slate-400">{t('jump.end')}</p>
           )}
         </div>
       </div>

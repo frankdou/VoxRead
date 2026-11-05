@@ -1,0 +1,103 @@
+/** English: fallback language */
+const en = {
+  meta: {
+    title: 'VoxRead · Audiobooks',
+  },
+  common: {
+    close: 'Close',
+  },
+  bookshelf: {
+    searchPlaceholder: 'Search by title',
+    notPdf: '{{file}}: not a PDF file',
+    imported: 'Imported "{{name}}"',
+    importFailed: 'Import failed. Please try again',
+    importDetail: '{{file}}: {{message}}',
+    deleteConfirm: 'Delete "{{title}}"? Its text and reading progress will be deleted too.',
+    deleted: 'Deleted "{{title}}"',
+    emptyTitle: 'Your shelf is empty',
+    emptyHint: 'Tap + in the bottom-right corner to upload a PDF and get started',
+    iosTitle: 'Add VoxRead to your Home Screen first',
+    iosBody:
+      'In Safari, tap the Share button at the bottom → "Add to Home Screen". On iOS, sites that are not installed may have their data cleared after 7 days without a visit (you could lose your books). Before listening, we also recommend downloading high-quality voices in Settings → Accessibility → Spoken Content → Voices.',
+    uploadPdf: 'Upload PDF',
+    importing: 'Parsing',
+    dismissError: 'Dismiss error',
+  },
+  language: {
+    zhHans: '简体中文',
+    zhHant: '繁體中文',
+    ja: '日本語',
+    ko: '한국어',
+    en: 'English',
+  },
+  settings: {
+    title: 'Settings',
+    rate: 'Speech rate',
+    fontSize: 'Reading font size',
+    theme: 'Theme',
+    themeLight: 'Light',
+    themeDark: 'Dark',
+    data: 'Data',
+    storageUsage: 'Local storage used {{usage}} / about {{quota}} available',
+    language: 'Language',
+  },
+  player: {
+    play: 'Play',
+    pause: 'Pause',
+    voice: 'Change voice',
+    settings: 'Settings',
+    voiceFallback: 'Voice',
+  },
+  bookCard: {
+    qualityTitle: 'Parsing quality may be poor (garbled text or two columns); narration may suffer',
+    qualityBadge: 'Quality',
+    delete: 'Delete',
+  },
+  voice: {
+    title: 'Voice',
+    hint: 'Takes effect immediately; opening or closing this panel does not interrupt narration',
+    empty: 'No system voices found (some browsers need a narration first or a voice pack download)',
+    noLanguageVoice: 'No {{language}} voices available; showing all available voices',
+    preview: 'Preview',
+    local: 'Local',
+    online: 'Online',
+    langZh: 'Chinese',
+    langEn: 'English',
+    langJa: 'Japanese',
+  },
+  search: {
+    placeholder: 'Enter text to find (spaces and punctuation are ignored)',
+    cancel: 'Cancel',
+    busy: 'Searching…',
+    hint: 'Find any text in this book; tap a result to jump there',
+    empty: 'No matches found',
+    blockPrefix: 'Block {{index}}',
+  },
+  jump: {
+    title: 'Jump to block',
+    subtitle: '{{total}} blocks · tap a block to jump (lighter = read)',
+    end: 'You have reached the end',
+  },
+  reader: {
+    loading: 'Loading…',
+    missing: 'This book does not exist or has been deleted',
+    backToShelf: 'Back to shelf',
+    prevChunk: 'Previous block',
+    nextChunk: 'Next block',
+    jumpToChunk: 'Jump to a block',
+    search: 'Search full text',
+    lowQuality: 'Parsing quality may be poor',
+    loadEarlier: 'Load earlier text',
+    endOfBook: '— End of book —',
+    locateCurrent: 'Go to current sentence',
+    currentSentence: 'Current sentence',
+    voiceFallback: 'No {{language}} voices available; switched to a general voice',
+    engineStall:
+      'The system voice is not responding. Check the mute switch and volume; if there is still no sound, quit the browser completely (swipe up to close it) and reopen this page',
+    unsupportedSpeech: 'This browser does not support speech synthesis',
+    emptyVoiceList:
+      'The system voice list is empty. Quit the browser completely (swipe up to close it) and reopen this page',
+  },
+}
+
+export default en

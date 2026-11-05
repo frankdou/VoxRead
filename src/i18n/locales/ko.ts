@@ -1,0 +1,103 @@
+/** 한국어 */
+const ko = {
+  meta: {
+    title: 'VoxRead · 오디오북',
+  },
+  common: {
+    close: '닫기',
+  },
+  bookshelf: {
+    searchPlaceholder: '책 제목 검색',
+    notPdf: '{{file}}: PDF 파일이 아닙니다',
+    imported: '‘{{name}}’ 가져오기를 완료했습니다',
+    importFailed: '가져오기에 실패했습니다. 다시 시도해 주세요',
+    importDetail: '{{file}}: {{message}}',
+    deleteConfirm: '‘{{title}}’을(를) 삭제할까요? 이 책의 텍스트와 진행도 함께 삭제됩니다.',
+    deleted: '‘{{title}}’을(를) 삭제했습니다',
+    emptyTitle: '책장이 비어 있습니다',
+    emptyHint: '오른쪽 아래 + 를 눌러 PDF를 올려 시작하세요',
+    iosTitle: 'VoxRead를 홈 화면에 추가하는 것을 권장합니다',
+    iosBody:
+      'Safari 하단의 공유 버튼 → “홈 화면에 추가”. 설치하지 않은 사이트는 iOS에서 7일 동안 접속하지 않으면 데이터가 지워집니다(책이 사라질 수 있습니다). 또한 읽어 주기 전에 설정 → 손쉬운 사용 → 콘텐츠 읽어 주기 → 음성에서 고품질 음성을 다운로드하는 것을 권장합니다.',
+    uploadPdf: 'PDF 업로드',
+    importing: '구문 분석 중',
+    dismissError: '오류 알림 닫기',
+  },
+  language: {
+    zhHans: '简体中文',
+    zhHant: '繁體中文',
+    ja: '日本語',
+    ko: '한국어',
+    en: 'English',
+  },
+  settings: {
+    title: '설정',
+    rate: '재생 속도',
+    fontSize: '읽기 글자 크기',
+    theme: '테마',
+    themeLight: '라이트',
+    themeDark: '다크',
+    data: '데이터',
+    storageUsage: '로컬 저장소 사용량 {{usage}} / 여유 공간 약 {{quota}}',
+    language: '언어',
+  },
+  player: {
+    play: '재생',
+    pause: '일시정지',
+    voice: '음성 변경',
+    settings: '설정',
+    voiceFallback: '음성',
+  },
+  bookCard: {
+    qualityTitle: '구문 분석 품질이 좋지 않을 수 있습니다(깨진 문자 또는 두 단 구성). 읽어 주기 품질에 영향을 줄 수 있습니다',
+    qualityBadge: '품질',
+    delete: '삭제',
+  },
+  voice: {
+    title: '음성',
+    hint: '선택 즉시 적용되며, 패널을 여닫아도 진행 중인 읽어 주기는 중단되지 않습니다',
+    empty: '시스템 음성을 가져오지 못했습니다(일부 브라우저는 읽어 주기를 한 번 실행하거나 음성 팩을 설치해야 합니다)',
+    noLanguageVoice: '{{language}} 음성을 사용할 수 없어 사용 가능한 모든 음성을 표시합니다',
+    preview: '미리 듣기',
+    local: '로컬',
+    online: '온라인',
+    langZh: '중국어',
+    langEn: '영어',
+    langJa: '일본어',
+  },
+  search: {
+    placeholder: '찾을 텍스트 입력(공백과 문장 부호는 무시됨)',
+    cancel: '취소',
+    busy: '검색 중…',
+    hint: '이 책 전체에서 원하는 텍스트를 찾고, 결과를 탭하면 해당 위치로 이동합니다',
+    empty: '일치하는 내용이 없습니다',
+    blockPrefix: '블록 {{index}}',
+  },
+  jump: {
+    title: '블록으로 이동',
+    subtitle: '총 {{total}} 블록 · 블록을 탭하면 바로 이동 (밝은 색 = 읽음)',
+    end: '마지막까지 도달했습니다',
+  },
+  reader: {
+    loading: '불러오는 중…',
+    missing: '이 책이 존재하지 않거나 삭제되었습니다',
+    backToShelf: '책장으로 돌아가기',
+    prevChunk: '이전 블록',
+    nextChunk: '다음 블록',
+    jumpToChunk: '지정한 블록으로 이동',
+    search: '전체 검색',
+    lowQuality: '구문 분석 품질이 낮을 수 있습니다',
+    loadEarlier: '앞부분 더 불러오기',
+    endOfBook: '—— 책 끝 ——',
+    locateCurrent: '현재 문장으로 이동',
+    currentSentence: '현재 문장',
+    voiceFallback: '{{language}} 음성을 사용할 수 없어 범용 음성으로 전환했습니다',
+    engineStall:
+      '시스템 음성이 응답하지 않습니다. 무음 스위치와 볼륨을 확인하세요. 그래도 소리가 나지 않으면 브라우저를 완전히 종료(위로 스와이프해서 닫기)한 뒤 이 페이지를 다시 여세요',
+    unsupportedSpeech: '이 브라우저는 음성 합성을 지원하지 않습니다',
+    emptyVoiceList:
+      '시스템 음성 목록이 비어 있습니다. 브라우저를 완전히 종료(위로 스와이프해서 닫기)한 뒤 이 페이지를 다시 여세요',
+  },
+}
+
+export default ko

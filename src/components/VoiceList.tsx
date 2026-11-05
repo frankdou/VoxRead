@@ -1,11 +1,11 @@
 import { Volume2 } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { speechEngine } from '../adapters/webSpeech'
 import {
-  FALLBACK_PREVIEW_TEXT,
   LANGUAGE_GROUPS,
+  LANGUAGE_LABEL_KEYS,
   VOICE_PREVIEW_TEXT,
-  languageLabel,
-  voiceGroupLabel,
+  voiceGroupCode,
   type TextLang,
 } from '../lib/voices'
 
@@ -20,36 +20,30 @@ interface Props {
 
 /** 音色列表：按语言分组，点名称选中、点试听听效果（设置面板与阅读页快捷切换共用） */
 export default function VoiceList({ voices, selectedURI, rate, lang, onSelect }: Props) {
+  const { t } = useTranslation()
   if (voices.length === 0) {
-    return (
-      <p className="text-sm text-slate-400">
-        未获取到系统音色（部分浏览器需要先触发一次朗读或下载语音包）
-      </p>
-    )
+    return <p className="text-sm text-slate-400">{t('voice.empty')}</p>
   }
-  const targetLabel = lang ? languageLabel(lang) : null
-  const matching = targetLabel
-    ? voices.filter(v => voiceGroupLabel(v.lang) === targetLabel)
-    : voices
+  const matching = lang ? voices.filter(v => voiceGroupCode(v.lang) === lang) : voices
   // 该书语言没有任何音色时不能出现空列表：回退到全部音色并明确提示
-  const noLanguageVoice = targetLabel !== null && matching.length === 0
+  const noLanguageVoice = lang != null && matching.length === 0
   const shown = noLanguageVoice ? voices : matching
   const groups = lang && !noLanguageVoice
     ? LANGUAGE_GROUPS.filter(g => g.code === lang)
     : LANGUAGE_GROUPS
   return (
     <>
-      {noLanguageVoice && (
+      {noLanguageVoice && lang && (
         <p className="mb-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:bg-amber-500/10 dark:text-amber-300">
-          系统没有可用的{targetLabel}音色，已显示全部可用音色
+          {t('voice.noLanguageVoice', { language: t(LANGUAGE_LABEL_KEYS[lang]) })}
         </p>
       )}
       {groups.map(group => {
-        const groupVoices = shown.filter(v => voiceGroupLabel(v.lang) === group.label)
+        const groupVoices = shown.filter(v => voiceGroupCode(v.lang) === group.code)
         if (groupVoices.length === 0) return null
         return (
           <div key={group.rank} className="mb-2">
-            <p className="mb-1 mt-3 text-xs font-medium text-slate-400">{group.label}</p>
+            <p className="mb-1 mt-3 text-xs font-medium text-slate-400">{t(group.labelKey)}</p>
             <div className="space-y-1">
               {groupVoices.map(v => {
                 const selected = v.voiceURI === selectedURI
@@ -69,20 +63,21 @@ export default function VoiceList({ voices, selectedURI, rate, lang, onSelect }:
                       </p>
                       <p className="text-xs text-slate-400">
                         {v.lang}
-                        {v.localService ? ' · 本地' : ' · 在线'}
+                        {' · '}
+                        {t(v.localService ? 'voice.local' : 'voice.online')}
                       </p>
                     </button>
                     <button
                       className="flex items-center gap-1 rounded-full bg-slate-100 px-3 py-1 text-xs dark:bg-slate-800"
                       onClick={() =>
                         speechEngine.preview(
-                          VOICE_PREVIEW_TEXT[voiceGroupLabel(v.lang) ?? '中文'] ?? FALLBACK_PREVIEW_TEXT,
+                          VOICE_PREVIEW_TEXT[voiceGroupCode(v.lang) ?? 'zh'],
                           { rate, voiceURI: v.voiceURI },
                         )
                       }
                     >
                       <Volume2 size={13} />
-                      试听
+                      {t('voice.preview')}
                     </button>
                   </div>
                 )
