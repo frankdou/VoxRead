@@ -20,6 +20,8 @@ import {
 import { repository } from '../adapters/indexeddb'
 import { speechEngine } from '../adapters/webSpeech'
 import { splitSentences, splitSentencesRich } from '../lib/sentences'
+import { resolveResumePosition } from '../lib/progress'
+import { shouldContinueReading, type JumpSource } from '../lib/jump'
 import { searchChunks, type SearchHit } from '../lib/search'
 import { useSettings } from '../store/settings'
 import PlayerBar from '../components/PlayerBar'
@@ -29,6 +31,9 @@ import PageJumpSheet from '../components/PageJumpSheet'
 
 const BEFORE = 2
 const AFTER = 5
+
+/** 跨 Reader 实例串行化进度写入：退出后立即重进时，初始化可以等最近一次写入真正落盘，避免读到旧值 */
+let pendingProgressWrite: Promise<void> = Promise.resolve()
 
 /** 块文本 → 按段落分组的句子（保留每段首句的全局序号，供高亮与点击定位） */
 function groupByPara(text: string): { start: number; sentences: { text: string }[] }[] {
@@ -78,16 +83,61 @@ export default function Reader() {
   const lastSaveRef = useRef(0)
   const playingRef = useRef(false)
   playingRef.current = playing
+  /**
+   * 朗读会话是否仍然有效：只有用户点击播放/点击句子后置 true；
+   * 停止、离开页面、切后台、换书后置 false，所有异步续读（块懒加载、块结束接续）都必须先校验，
+   * 避免 stop 之后又被排队中的续读任务重新开口。
+   */
+  const sessionLiveRef = useRef(false)
+  /** 会话代际：每次停止/换书/离开页面都 +1，异步续读要校验代际，避免上一会话的任务在新会话里开口 */
+  const sessionGenRef = useRef(0)
+  /** 朗读推进时是否自动跟随滚动；用户手动滚动/滑动后关闭，点"当前句"或重新点播放时恢复 */
+  const followRef = useRef(true)
+  /** 正文容器：只在正文上的滚动手势才算"用户手动离开" */
+  const mainRef = useRef<HTMLElement>(null)
+  /** 进度是否已恢复完成：未完成前任何写入/滚动都不应落盘，否则会覆盖真实断点 */
+  const initializedRef = useRef(false)
+  const bookIdRef = useRef(bookId)
+  bookIdRef.current = bookId
   /** 视口顶部可见的块序号：头部页码显示它，滚动/翻页后都与所见内容对应 */
   const topSeqRef = useRef(0)
   const [topSeq, setTopSeq] = useState(0)
+  /** 视口顶部可见块里的第一句（纯阅读时的断点粒度） */
+  const topSentRef = useRef(0)
+  /** 断点恢复/跳块待执行的滚动目标：目标块渲染出来后再滚，且只滚一次 */
+  const resumeTargetRef = useRef<{ seq: number; idx: number } | null>(null)
+  /**
+   * 程序化滚动（断点恢复/跳转/找回当前句）期间暂停断点采样：
+   * 内联 span 跨行时按几何取"顶部句"会取到上一句（甚至更早），
+   * 若此时把采样结果落盘，反复进出会被这个更早的句子反复往回带。
+   */
+  const scrollSkipRef = useRef(false)
+  const scrollSkipTimerRef = useRef(0)
+  const suppressScrollSampling = () => {
+    scrollSkipRef.current = true
+    window.clearTimeout(scrollSkipTimerRef.current)
+    scrollSkipTimerRef.current = window.setTimeout(() => {
+      scrollSkipRef.current = false
+    }, 800)
+  }
 
   // 换书/首次进入时清空阅读视图，等进度初始化后再定位（同一组件实例在 /book/:id 间切换不会重挂载）
   useEffect(() => {
+    // 换书必须停掉上一本书的朗读；这里不做 flush（closure 已指向新 bookId），离开页面的 flush 由卸载逻辑负责
+    sessionLiveRef.current = false
+    sessionGenRef.current += 1
+    followRef.current = true
+    speechEngine.stop()
+    setPlaying(false)
+    setPaused(false)
     seqRef.current = 0
     topSeqRef.current = 0
+    topSentRef.current = 0
     sentIdxRef.current = 0
     chunksRef.current = new Map()
+    resumeTargetRef.current = null
+    initializedRef.current = false
+    lastSaveRef.current = 0
     setSeq(0)
     setTopSeq(0)
     setSentIdx(0)
@@ -100,15 +150,26 @@ export default function Reader() {
   useEffect(() => {
     if (!bookId || initedFor.current === bookId || progress === undefined || !total) return
     initedFor.current = bookId
-    const start = Math.min(progress?.chunkSeq ?? 0, total - 1)
-    const si = progress?.sentenceIndex ?? 0
-    seqRef.current = start
-    setSeq(start)
-    topSeqRef.current = start
-    setTopSeq(start)
-    sentIdxRef.current = si
-    setSentIdx(si)
-    setInitialized(true)
+    // 退出→立即重进时，上一次 flush 可能还没落盘；等它完成后再读库，避免恢复成旧位置
+    void pendingProgressWrite
+      .then(() => repository.getProgress(bookId))
+      .catch(() => progress)
+      .then(latest => {
+        if (bookIdRef.current !== bookId) return
+        const saved = latest ?? progress
+        const pos = resolveResumePosition(saved?.bookId === bookId ? saved : null, total)
+        seqRef.current = pos.seq
+        setSeq(pos.seq)
+        topSeqRef.current = pos.seq
+        setTopSeq(pos.seq)
+        topSentRef.current = pos.sentenceIndex
+        sentIdxRef.current = pos.sentenceIndex
+        setSentIdx(pos.sentenceIndex)
+        // 恢复要落到具体句子（而不只是块首），等目标块渲染后由滚动定位效果执行
+        resumeTargetRef.current = { seq: pos.seq, idx: pos.sentenceIndex }
+        initializedRef.current = true
+        setInitialized(true)
+      })
   }, [bookId, progress, total])
 
   const ensureChunks = useCallback(
@@ -146,8 +207,12 @@ export default function Reader() {
   const saveProgressNow = useCallback(
     (s = seqRef.current, i = sentIdxRef.current) => {
       if (!bookId) return
-      repository.saveProgress({ bookId, chunkSeq: s, sentenceIndex: i, updatedAt: Date.now() })
       lastSaveRef.current = Date.now()
+      const p = { bookId, chunkSeq: s, sentenceIndex: i, updatedAt: Date.now() }
+      // 串行落盘：并发 put 不乱序，重进时的初始化也能等到最近一次写入完成
+      pendingProgressWrite = pendingProgressWrite
+        .then(() => repository.saveProgress(p))
+        .catch(() => {})
     },
     [bookId],
   )
@@ -170,6 +235,8 @@ export default function Reader() {
 
   const playFromRef = useRef<(s: number, i: number, fromGesture?: boolean) => void>(() => {})
   playFromRef.current = (s: number, startIdx: number, fromGesture = false) => {
+    // 会话已被 stop / 离开页面 / 换书终止：异步续读任务不得重新开口
+    if (!sessionLiveRef.current) return
     const text = chunksRef.current.get(s)
     if (text === undefined) return
     const sentences = splitSentencesRich(text).map(x => x.text)
@@ -190,6 +257,7 @@ export default function Reader() {
       onChunkEnd: () => {
         const next = s + 1
         if (next >= total) {
+          sessionLiveRef.current = false
           setPlaying(false)
           setPaused(false)
           saveProgressNow(Math.max(0, total - 1), 0)
@@ -200,7 +268,11 @@ export default function Reader() {
         sentIdxRef.current = 0
         setSentIdx(0)
         saveProgressNow(next, 0)
-        ensureChunks(next, AFTER).then(() => playFromRef.current(next, 0))
+        const gen = sessionGenRef.current
+        ensureChunks(next, AFTER).then(() => {
+          // 等待加载期间可能已 stop/换书：代际失效就不要再开口
+          if (gen === sessionGenRef.current && sessionLiveRef.current) playFromRef.current(next, 0)
+        })
       },
     })
     speechEngine.speakChunk(sentences, speakOpts, idx, fromGesture)
@@ -216,6 +288,10 @@ export default function Reader() {
       setPaused(true)
       saveProgressNow()
     } else if (playing && paused) {
+      sessionLiveRef.current = true
+      sessionGenRef.current += 1
+      // 用户点继续：恢复自动跟随
+      followRef.current = true
       // 引擎可能在试听等操作中被取消出 paused 态，此时直接重读当前句
       if (speechEngine.isPaused()) {
         speechEngine.resume()
@@ -233,15 +309,27 @@ export default function Reader() {
       }
       setPlaying(true)
       setPaused(false)
+      sessionLiveRef.current = true
+      // 用户重新点播放：作废可能还在等待懒加载的上一段续读，避免它抢先开读
+      sessionGenRef.current += 1
+      followRef.current = true
       playFromRef.current(seqRef.current, sentIdxRef.current, true)
     }
   }
 
-  const jumpTo = (target: number, continuePlayback = true, targetSentIdx = 0) => {
+  /**
+   * 统一的跳块入口，按来源区分朗读语义：
+   * - arrow（翻页箭头）：正在朗读时沿用当前会话继续读
+   * - page（页码跳转）/ search（搜索命中）：强制停止朗读，只把视图定位到目标并落盘该位置
+   */
+  const jumpTo = (target: number, source: JumpSource, targetSentIdx = 0) => {
     if (!total) return
     const next = Math.min(Math.max(target, 0), total - 1)
     const wasActive = playing
+    // 三种来源都先停引擎；是否续读由来源决定，避免依赖默认参数
     speechEngine.stop()
+    sessionLiveRef.current = false
+    sessionGenRef.current += 1
     if (wasActive) {
       setPlaying(false)
       setPaused(false)
@@ -250,26 +338,36 @@ export default function Reader() {
     setSeq(next)
     topSeqRef.current = next
     setTopSeq(next)
+    topSentRef.current = targetSentIdx
     sentIdxRef.current = targetSentIdx
     setSentIdx(targetSentIdx)
     setVis({ start: Math.max(0, next - BEFORE), end: Math.min(total, next + AFTER + 1) })
-    saveProgressNow(next, 0)
-    if (wasActive && continuePlayback) {
+    // 句序号必须一起落盘：搜索命中/指定句跳转后按 0 保存会丢掉具体句子
+    saveProgressNow(next, targetSentIdx)
+    if (shouldContinueReading(source, wasActive)) {
+      followRef.current = true
+      sessionLiveRef.current = true
       setPlaying(true)
       setPaused(false)
-      ensureChunks(next, AFTER).then(() => playFromRef.current(next, 0))
+      const gen = sessionGenRef.current
+      ensureChunks(next, AFTER).then(() => {
+        if (gen === sessionGenRef.current) playFromRef.current(next, 0)
+      })
+    } else {
+      resumeTargetRef.current = { seq: next, idx: targetSentIdx }
     }
   }
-  // 箭头翻页基于"正在看的块"，与头部页码一致
-  const jump = (d: number) => jumpTo(topSeqRef.current + d)
+  // 箭头翻页基于"正在看的块"，与头部页码一致；朗读中继续当前会话
+  const jump = (d: number) => jumpTo(topSeqRef.current + d, 'arrow')
 
-  // 视口顶部可见块跟踪：头部页码跟随用户所见，而不是内部朗读位置
+  // 视口顶部可见块/句跟踪：头部页码跟随用户所见；纯阅读/滚动时把所见句作为断点
   useEffect(() => {
     let raf = 0
     const onScroll = () => {
       if (raf) return
       raf = window.requestAnimationFrame(() => {
         raf = 0
+        if (scrollSkipRef.current) return
         const line = 64
         const sections = [...document.querySelectorAll<HTMLElement>('[id^="chunk-"]')]
           .map(el => Number(el.id.slice(6)))
@@ -282,9 +380,25 @@ export default function Reader() {
             break
           }
         }
-        if (top !== topSeqRef.current) {
+        let topIdx = 0
+        const section = document.getElementById(`chunk-${top}`)
+        if (section) {
+          for (const el of section.querySelectorAll<HTMLElement>('[id^="sent-"]')) {
+            if (el.getBoundingClientRect().bottom > line + 8) {
+              topIdx = Number(el.id.slice(`sent-${top}-`.length)) || 0
+              break
+            }
+          }
+        }
+        const topChanged = top !== topSeqRef.current
+        if (topChanged) {
           topSeqRef.current = top
           setTopSeq(top)
+        }
+        if (topChanged || topIdx !== topSentRef.current) {
+          topSentRef.current = topIdx
+          // 朗读中由引擎逐句推进写入，滚动不覆盖；进度未恢复前也不能写，否则会把断点覆盖成 0
+          if (!playingRef.current && initializedRef.current) saveProgressSoon(top, topIdx)
         }
       })
     }
@@ -293,7 +407,7 @@ export default function Reader() {
       window.removeEventListener('scroll', onScroll)
       if (raf) window.cancelAnimationFrame(raf)
     }
-  }, [])
+  }, [saveProgressSoon])
 
   const runSearch = useCallback(
     async (query: string): Promise<SearchHit[]> => {
@@ -319,7 +433,7 @@ export default function Reader() {
     const target = { seq: hit.seq, idx: sentIdx }
     flashSentRef.current = target
     setFlashSent(target)
-    jumpTo(hit.seq, false, sentIdx)
+    jumpTo(hit.seq, 'search', sentIdx)
   }
 
   useEffect(() => {
@@ -338,6 +452,7 @@ export default function Reader() {
     setSeq(s)
     topSeqRef.current = s
     setTopSeq(s)
+    topSentRef.current = idx
     sentIdxRef.current = idx
     setSentIdx(idx)
     setPlaying(true)
@@ -349,11 +464,46 @@ export default function Reader() {
     )
     saveProgressNow(s, idx)
     // 必须走 playFromRef：它负责注册引擎回调（逐句高亮/滚动、块结束续读），直接 speakChunk 会让界面完全不知道朗读进度
+    sessionLiveRef.current = true
+    // 用户点句开读优先于任何排队中的续读
+    sessionGenRef.current += 1
+    followRef.current = true
     playFromRef.current(s, idx, true)
   }
 
-  // 离开阅读页停止朗读
-  useEffect(() => () => speechEngine.stop(), [])
+  // 离开阅读页 / 切后台：先落盘，再同步且幂等地停止朗读与所有待续读任务
+  const flushPositionRef = useRef<() => void>(() => {})
+  flushPositionRef.current = () => {
+    // 进度还没恢复完成时不能写，会把真实断点覆盖成 0
+    if (!initializedRef.current) return
+    // 朗读中且视图仍在跟随朗读句：以朗读句为准；已手动滚离或已停止朗读：写用户当前可见位置
+    if (playingRef.current && followRef.current) saveProgressNow(seqRef.current, sentIdxRef.current)
+    else saveProgressNow(topSeqRef.current, topSentRef.current)
+  }
+  const stopReadingRef = useRef<() => void>(() => {})
+  stopReadingRef.current = () => {
+    // 先置 false：引擎 stop 会让排队中的续读（块懒加载/块结束接续）失效，避免 stop 后又被重新开读
+    sessionLiveRef.current = false
+    sessionGenRef.current += 1
+    flushPositionRef.current()
+    speechEngine.stop()
+    setPlaying(false)
+    setPaused(false)
+  }
+  useEffect(() => {
+    const stopReading = () => stopReadingRef.current()
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') stopReading()
+    }
+    window.addEventListener('pagehide', stopReading)
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => {
+      window.removeEventListener('pagehide', stopReading)
+      document.removeEventListener('visibilitychange', onVisibility)
+      // 返回书架/切到其他路由会卸载本组件；这里必须同步取消 speechSynthesis 队列
+      stopReading()
+    }
+  }, [])
 
   // 朗读时保持屏幕常亮（iOS 锁屏会停朗读的缓解手段）
   useEffect(() => {
@@ -375,16 +525,28 @@ export default function Reader() {
     }
   }, [playing, paused])
 
-  // 非播放状态下切块时定位视图；有搜索命中锚点时优先滚到命中句（等 chunks 渲染后生效）
+  // 断点恢复/跳块定位：等目标块渲染出来再滚到目标句（无句序号则滚块顶），只执行一次。
+  // 之前这里依赖整个 chunks，追加加载块时会把视图反复拽回 seq 所在块，导致"退出位置对不上"。
   useEffect(() => {
-    if (playingRef.current) return
-    const f = flashSentRef.current
-    if (f && f.seq === seq) {
-      document.getElementById(`sent-${seq}-${f.idx}`)?.scrollIntoView({ block: 'center' })
-    } else {
-      document.getElementById(`chunk-${seq}`)?.scrollIntoView({ block: 'start' })
+    if (playingRef.current) {
+      // 开始朗读后由引擎的高亮跟随负责滚动，清掉待执行的定位避免停下时被拽回
+      resumeTargetRef.current = null
+      return
     }
-  }, [seq, chunks])
+    const t = resumeTargetRef.current
+    if (!t || t.seq !== seq || !chunks.has(t.seq)) return
+    resumeTargetRef.current = null
+    // 定位是程序化滚动，不能把途中采样到的"顶部句"当成用户断点
+    suppressScrollSampling()
+    const sentEl = t.idx > 0 ? document.getElementById(`sent-${t.seq}-${t.idx}`) : null
+    if (sentEl) {
+      // 把恢复句放到吸顶头部下方（而不是居中），这样"视口顶部句"与断点一致，反复进出不会向后漂移
+      const y = window.scrollY + sentEl.getBoundingClientRect().top - 64
+      window.scrollTo(0, Math.max(0, y))
+    } else {
+      document.getElementById(`chunk-${t.seq}`)?.scrollIntoView({ block: 'start' })
+    }
+  }, [seq, chunks, vis, playing])
 
   // 搜索命中定位单独触发：命中可能在当前块内（seq 不变），上面的效果不会重跑
   useEffect(() => {
@@ -401,14 +563,33 @@ export default function Reader() {
     )
   }, [seq, total])
 
+  // 用户手动滚动/滑动正文：朗读继续，但关闭自动跟随，避免朗读推进把用户滚走的位置硬拽回来
+  useEffect(() => {
+    const off = (e: Event) => {
+      const t = e.target
+      if (t instanceof Node && mainRef.current?.contains(t)) {
+        followRef.current = false
+        // 用户真正开始滚动：程序化定位的采样抑制到此结束
+        scrollSkipRef.current = false
+      }
+    }
+    window.addEventListener('wheel', off, { passive: true })
+    window.addEventListener('touchmove', off, { passive: true })
+    return () => {
+      window.removeEventListener('wheel', off)
+      window.removeEventListener('touchmove', off)
+    }
+  }, [])
+
   // 播放时当前句居中跟随。跨块推进时目标句常晚于 seq 就绪（等 vis 扩展/chunks 加载后才有 DOM），
   // 因此依赖 chunks 和 vis 变化重试，并加 400ms 延迟兜底；瞬时滚动（iOS 的 smooth scrollIntoView 间歇失效）
   useEffect(() => {
-    if (!playing || paused) return
+    // 用户手动滚走后不再跟随：朗读继续出声，但视图留在用户停下的位置
+    if (!playing || paused || !followRef.current) return
     const el = () => document.getElementById(`sent-${seq}-${sentIdx}`)
     el()?.scrollIntoView({ block: 'center' })
     const t = window.setTimeout(() => {
-      if (playingRef.current) el()?.scrollIntoView({ block: 'center' })
+      if (playingRef.current && followRef.current) el()?.scrollIntoView({ block: 'center' })
     }, 400)
     return () => window.clearTimeout(t)
   }, [seq, sentIdx, playing, paused, chunks, vis])
@@ -532,7 +713,7 @@ export default function Reader() {
         </div>
       </header>
 
-      <main className="reader-text mx-auto max-w-prose px-5 pt-4">
+      <main ref={mainRef} className="reader-text mx-auto max-w-prose px-5 pt-4">
         {vis && vis.start > 0 && (
           <button
             onClick={loadEarlier}
@@ -604,7 +785,7 @@ export default function Reader() {
         total={total}
         current={topSeq}
         onClose={() => setJumpOpen(false)}
-        onJump={jumpTo}
+        onJump={page => jumpTo(page, 'page')}
       />
     </div>
   )
