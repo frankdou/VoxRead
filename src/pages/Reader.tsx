@@ -24,6 +24,12 @@ import { splitSentences, splitSentencesRich } from '../lib/sentences'
 import { resolveResumePosition } from '../lib/progress'
 import { shouldContinueReading, type JumpSource } from '../lib/jump'
 import { searchChunks, type SearchHit } from '../lib/search'
+import {
+  detectBookLanguage,
+  languageLabel,
+  resolveBookVoice,
+  type TextLang,
+} from '../lib/voices'
 import { useSettings } from '../store/settings'
 import PlayerBar from '../components/PlayerBar'
 import SettingsSheet from '../components/SettingsSheet'
@@ -57,7 +63,7 @@ function groupByPara(text: string): { start: number; sentences: { text: string }
 
 export default function Reader() {
   const { bookId = '' } = useParams()
-  const { settings } = useSettings()
+  const { settings, update } = useSettings()
   // undefined = 查询中；null = 书不存在（已被删除）
   const book = useLiveQuery(async () => (await repository.getBook(bookId)) ?? null, [bookId])
   const progress = useLiveQuery(() => repository.getProgress(bookId), [bookId])
@@ -80,6 +86,9 @@ export default function Reader() {
   const [vis, setVis] = useState<{ start: number; end: number } | null>(null)
   /** 系统音色列表（播放栏展示当前音色名用；iOS 上会异步到达） */
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([])
+  /** 本书语言：优先取 BookMeta.language，历史书籍用正文检测后补写；绑定 bookId 防止切书瞬间沿用上一本的语言 */
+  const [bookLangState, setBookLangState] = useState<{ bookId: string; lang: TextLang } | null>(null)
+  const bookLang = bookLangState?.bookId === bookId ? bookLangState.lang : null
   /** 当前朗读句是否在视口内：用于在用户滚离后显示"回到当前句"锚点 */
   const [atCurrent, setAtCurrent] = useState(true)
 
@@ -113,6 +122,10 @@ export default function Reader() {
   const topSentRef = useRef(0)
   /** 断点恢复/跳块待执行的滚动目标：目标块渲染出来后再滚，且只滚一次 */
   const resumeTargetRef = useRef<{ seq: number; idx: number } | null>(null)
+  /** 已执行过"按书籍语言自动选音色"的书：避免音色列表异步到达/设置变化时反复覆盖用户手动选择 */
+  const voiceInitForRef = useRef<string | null>(null)
+  /** 已补检测语言的书：避免重复写库 */
+  const langDetectedForRef = useRef<string | null>(null)
   /**
    * 程序化滚动（断点恢复/跳转/找回当前句）期间暂停断点采样：
    * 内联 span 跨行时按几何取"顶部句"会取到上一句（甚至更早），
@@ -137,6 +150,9 @@ export default function Reader() {
     speechEngine.stop()
     setPlaying(false)
     setPaused(false)
+    setBookLangState(null)
+    voiceInitForRef.current = null
+    langDetectedForRef.current = null
     seqRef.current = 0
     topSeqRef.current = 0
     topSentRef.current = 0
@@ -253,6 +269,60 @@ export default function Reader() {
     () => voices.find(v => v.voiceURI === settings.voiceURI)?.name ?? null,
     [voices, settings.voiceURI],
   )
+
+  // 书籍语言：导入时已写入的直接用；历史书籍用已加载正文检测一次并回写
+  useEffect(() => {
+    if (!book) return
+    const setLang = (lang: TextLang) =>
+      setBookLangState(prev =>
+        prev?.bookId === bookId && prev.lang === lang ? prev : { bookId, lang },
+      )
+    if (book.language) {
+      setLang(book.language)
+      return
+    }
+    if (langDetectedForRef.current === bookId) return
+    const sample = [...chunks.entries()]
+      .sort((a, b) => a[0] - b[0])
+      .slice(0, 3)
+      .map(([, text]) => text)
+      .join('\n')
+    if (!sample) return
+    const detected = detectBookLanguage(sample)
+    if (!detected) return
+    langDetectedForRef.current = bookId
+    setLang(detected)
+    void repository.updateBookLanguage(bookId, detected)
+  }, [book, bookId, chunks])
+
+  // 打开书籍时按语言决定音色：本书手动选择优先；切到不同语言的书自动换新语言默认音色；
+  // 该书语言没有音色时回退通用音色并提示，避免出现"列表为空/没有选中音色"
+  useEffect(() => {
+    if (!bookLang || !book || voices.length === 0) return
+    if (voiceInitForRef.current === bookId) return
+    voiceInitForRef.current = bookId
+    const { voice, fallback } = resolveBookVoice(
+      bookLang,
+      book.voiceURI,
+      voices,
+      settings.voiceURI,
+    )
+    if (voice && voice.voiceURI !== settings.voiceURI) {
+      update({ voiceURI: voice.voiceURI })
+    }
+    if (fallback) {
+      Toast.show({
+        content: `系统没有可用的${languageLabel(bookLang)}音色，已回退到通用音色`,
+        duration: 3000,
+      })
+    }
+  }, [book, bookId, bookLang, voices, settings.voiceURI, update])
+
+  // 用户手动选音色：写入本书（下次打开保留），同时立即生效到全局引擎设置
+  const handleVoiceSelect = (voiceURI: string) => {
+    update({ voiceURI })
+    void repository.updateBookVoice(bookId, voiceURI)
+  }
 
   const playFromRef = useRef<(s: number, i: number, fromGesture?: boolean) => void>(() => {})
   playFromRef.current = (s: number, startIdx: number, fromGesture = false) => {
@@ -873,7 +943,13 @@ export default function Reader() {
         onSettings={() => setSettingsOpen(true)}
       />
       <SettingsSheet open={settingsOpen} onClose={() => setSettingsOpen(false)} />
-      <VoiceSheet open={voiceOpen} onClose={() => setVoiceOpen(false)} voices={voices} />
+      <VoiceSheet
+        open={voiceOpen}
+        onClose={() => setVoiceOpen(false)}
+        voices={voices}
+        lang={bookLang}
+        onSelect={handleVoiceSelect}
+      />
       <SearchSheet
         open={searchOpen}
         onClose={() => setSearchOpen(false)}

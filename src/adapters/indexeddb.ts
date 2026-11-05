@@ -5,6 +5,7 @@ import { ImportError, type BookRepository } from './repository'
 export { ImportError }
 import { extractBook } from '../lib/pdf'
 import { buildChunks } from '../lib/chunker'
+import { detectBookLanguage, langTagToTextLang, type TextLang } from '../lib/voices'
 
 class VoxReadDB extends Dexie {
   books!: Table<BookMeta, string>
@@ -28,6 +29,19 @@ export const db = new VoxReadDB()
 function uid(): string {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return crypto.randomUUID()
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`
+}
+
+/** 取开头/中段/结尾的正文样本做语言检测，避免拼接整本书 */
+function languageSample(paragraphs: string[]): string {
+  const n = paragraphs.length
+  if (n === 0) return ''
+  const pick = (from: number, count: number) =>
+    paragraphs.slice(from, from + count).map(p => p.slice(0, 1000)).join('\n')
+  return [
+    pick(0, 20),
+    pick(Math.max(0, Math.floor(n / 2) - 5), 10),
+    pick(Math.max(0, n - 20), 20),
+  ].join('\n')
 }
 
 interface ExportFile {
@@ -63,6 +77,11 @@ export const repository: BookRepository = {
       throw new ImportError('未检测到文本层（可能是扫描版 PDF），暂不支持', 'scanned')
     }
     const chunks = buildChunks(result.paragraphs)
+    // 优先用 PDF 元数据语言标签，缺失或无法识别时按正文检测；都失败则留空，不阻断导入
+    const language =
+      langTagToTextLang(result.language ?? '') ??
+      detectBookLanguage(languageSample(result.paragraphs)) ??
+      undefined
     const meta: BookMeta = {
       id: uid(),
       title: result.title ?? file.name.replace(/\.pdf$/i, ''),
@@ -73,6 +92,7 @@ export const repository: BookRepository = {
       lastReadAt: Date.now(),
       coverBlob: result.coverBlob ?? undefined,
       lowQuality: result.garbled || result.doubleColumn,
+      language,
     }
     await db.transaction('rw', db.books, db.chunks, async () => {
       await db.books.add(meta)
@@ -97,6 +117,14 @@ export const repository: BookRepository = {
 
   async getProgress(bookId) {
     return (await db.progress.get(bookId)) ?? null
+  },
+
+  async updateBookVoice(bookId, voiceURI) {
+    await db.books.update(bookId, { voiceURI })
+  },
+
+  async updateBookLanguage(bookId, language: TextLang) {
+    await db.books.update(bookId, { language })
   },
 
   async deleteBook(bookId) {

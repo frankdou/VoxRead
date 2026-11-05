@@ -15,6 +15,8 @@ export interface ExtractResult {
   garbled: boolean
   doubleColumn: boolean
   title: string | null
+  /** PDF 元数据里的语言标签（可能缺失，由调用方再用正文检测兜底） */
+  language: string | null
   coverBlob: Blob | null
 }
 
@@ -66,14 +68,15 @@ export async function extractBook(
       pages.map(p => p.map(l => ({ x0: l.x0, width: l.width }))),
     )
     const coverBlob = await renderCover(doc)
-    const title = await readTitle(doc)
+    const meta = await readMetadata(doc)
     onProgress?.(96)
     return {
       paragraphs,
       pageCount,
       garbled: garbledRatio(allText) > 0.01,
       doubleColumn,
-      title,
+      title: meta.title,
+      language: meta.language,
       coverBlob,
     }
   } finally {
@@ -151,17 +154,40 @@ async function renderCover(doc: pdfjs.PDFDocumentProxy): Promise<Blob | null> {
   }
 }
 
-async function readTitle(doc: pdfjs.PDFDocumentProxy): Promise<string | null> {
+function firstNonEmptyString(v: unknown): string | null {
+  if (typeof v === 'string' && v.trim()) return v.trim()
+  if (Array.isArray(v)) {
+    for (const item of v) if (typeof item === 'string' && item.trim()) return item.trim()
+  }
+  return null
+}
+
+/**
+ * 读取 PDF 元数据：标题 + 语言标签。
+ * PDF 规范没有 Info 字典的语言字段，语言主要来自 XMP 的 dc:language（常缺失），
+ * 所以 language 只是提示，调用方仍需用正文检测兜底。
+ */
+async function readMetadata(
+  doc: pdfjs.PDFDocumentProxy,
+): Promise<{ title: string | null; language: string | null }> {
   try {
-    const { info } = await doc.getMetadata()
-    const t = (info as { Title?: unknown } | undefined)?.Title
-    if (typeof t !== 'string') return null
-    const s = t.trim()
-    if (!s || /^untitled$/i.test(s) || /^[\d\s.]+$/.test(s) || /[\uFFFD\uE000-\uF8FF]/.test(s)) {
-      return null
+    const { info, metadata } = await doc.getMetadata()
+    const infoTitle = (info as { Title?: unknown }).Title
+    let title: string | null = null
+    if (typeof infoTitle === 'string') {
+      const s = infoTitle.trim()
+      if (!s || /^untitled$/i.test(s) || /^[\d\s.]+$/.test(s) || /[\uFFFD\uE000-\uF8FF]/.test(s)) {
+        title = null
+      } else {
+        title = s.slice(0, 80)
+      }
     }
-    return s.slice(0, 80)
+    // 少数生成器会把 Language 塞进 Info 字典；标准位置在 XMP 的 dc:language
+    const language =
+      firstNonEmptyString((info as { Language?: unknown }).Language) ??
+      firstNonEmptyString(metadata?.get?.('dc:language'))
+    return { title, language }
   } catch {
-    return null
+    return { title: null, language: null }
   }
 }

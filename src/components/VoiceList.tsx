@@ -4,18 +4,22 @@ import {
   FALLBACK_PREVIEW_TEXT,
   LANGUAGE_GROUPS,
   VOICE_PREVIEW_TEXT,
+  languageLabel,
   voiceGroupLabel,
+  type TextLang,
 } from '../lib/voices'
 
 interface Props {
   voices: SpeechSynthesisVoice[]
   selectedURI: string | null
   rate: number
+  /** 书籍语言：只展示该语言的音色；该语言没有可用音色时回退展示全部并提示 */
+  lang?: TextLang | null
   onSelect: (voiceURI: string) => void
 }
 
 /** 音色列表：按语言分组，点名称选中、点试听听效果（设置面板与阅读页快捷切换共用） */
-export default function VoiceList({ voices, selectedURI, rate, onSelect }: Props) {
+export default function VoiceList({ voices, selectedURI, rate, lang, onSelect }: Props) {
   if (voices.length === 0) {
     return (
       <p className="text-sm text-slate-400">
@@ -23,10 +27,25 @@ export default function VoiceList({ voices, selectedURI, rate, onSelect }: Props
       </p>
     )
   }
+  const targetLabel = lang ? languageLabel(lang) : null
+  const matching = targetLabel
+    ? voices.filter(v => voiceGroupLabel(v.lang) === targetLabel)
+    : voices
+  // 该书语言没有任何音色时不能出现空列表：回退到全部音色并明确提示
+  const noLanguageVoice = targetLabel !== null && matching.length === 0
+  const shown = noLanguageVoice ? voices : matching
+  const groups = lang && !noLanguageVoice
+    ? LANGUAGE_GROUPS.filter(g => g.code === lang)
+    : LANGUAGE_GROUPS
   return (
     <>
-      {LANGUAGE_GROUPS.map(group => {
-        const groupVoices = voices.filter(v => voiceGroupLabel(v.lang) === group.label)
+      {noLanguageVoice && (
+        <p className="mb-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:bg-amber-500/10 dark:text-amber-300">
+          系统没有可用的{targetLabel}音色，已显示全部可用音色
+        </p>
+      )}
+      {groups.map(group => {
+        const groupVoices = shown.filter(v => voiceGroupLabel(v.lang) === group.label)
         if (groupVoices.length === 0) return null
         return (
           <div key={group.rank} className="mb-2">

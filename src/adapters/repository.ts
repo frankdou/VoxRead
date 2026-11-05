@@ -1,4 +1,5 @@
 import type { BookMeta, Chunk, Progress, Settings } from '../types'
+import type { TextLang } from '../lib/voices'
 
 export class ImportError extends Error {
   constructor(
@@ -17,6 +18,10 @@ export interface BookRepository {
   getChunks(bookId: string, fromSeq: number, count: number): Promise<Chunk[]>
   saveProgress(p: Progress): Promise<void>
   getProgress(bookId: string): Promise<Progress | null>
+  /** 保存本书手动选择的音色（null 表示改回按语言自动选择） */
+  updateBookVoice(bookId: string, voiceURI: string | null): Promise<void>
+  /** 回写历史书籍检测出的语言 */
+  updateBookLanguage(bookId: string, language: TextLang): Promise<void>
   deleteBook(bookId: string): Promise<void>
   getSettings(): Promise<Settings | null>
   saveSettings(s: Settings): Promise<void>

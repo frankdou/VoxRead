@@ -1,8 +1,11 @@
+/** 应用支持的三类朗读语言 */
+export type TextLang = 'zh' | 'en' | 'ja'
+
 /** 应用支持的朗读语言：中文（普通话）、英文、日语（粤语及其他语言的系统音色一律不列出） */
 export const LANGUAGE_GROUPS = [
-  { rank: 0, label: '中文', test: /^(zh|cmn)/ },
-  { rank: 1, label: 'English', test: /^en/ },
-  { rank: 2, label: '日本語', test: /^ja/ },
+  { rank: 0, label: '中文', code: 'zh' as TextLang, test: /^(zh|cmn)/ },
+  { rank: 1, label: 'English', code: 'en' as TextLang, test: /^en/ },
+  { rank: 2, label: '日本語', code: 'ja' as TextLang, test: /^ja/ },
 ] as const
 
 /** 每个语言组最多展示的音色数 */
@@ -102,7 +105,100 @@ export function voiceGroupLabel(lang: string): string | null {
   return LANGUAGE_GROUPS.find(g => g.test.test(l))?.label ?? null
 }
 
-export type TextLang = 'zh' | 'en' | 'ja'
+/** 语言 → 展示名（如 zh → 中文） */
+export function languageLabel(lang: TextLang): string {
+  return LANGUAGE_GROUPS.find(g => g.code === lang)?.label ?? ''
+}
+
+/** PDF / 系统语言标签（如 zh-CN、cmn-Hans）→ 应用支持的语言 */
+export function langTagToTextLang(tag: string): TextLang | null {
+  const t = tag.trim().toLowerCase()
+  if (!t) return null
+  return LANGUAGE_GROUPS.find(g => g.test.test(t))?.code ?? null
+}
+
+/**
+ * 书籍语言检测：统计正文中汉字 / 假名 / 拉丁字母的数量，取占优的语言。
+ * 日语以假名在 CJK 字符中的占比判定（少量引用的假名不会把中文书误判为日语）；
+ * 样本太少（< 20 个有效字符）时返回 null，交给调用方保持现有音色。
+ */
+export function detectBookLanguage(text: string): TextLang | null {
+  let han = 0
+  let kana = 0
+  let latin = 0
+  for (const ch of text) {
+    const c = ch.codePointAt(0) ?? 0
+    if ((c >= 0x3040 && c <= 0x30ff) || (c >= 0x31f0 && c <= 0x31ff)) kana++
+    else if (c >= 0x3400 && c <= 0x9fff) han++
+    else if ((c >= 0x41 && c <= 0x5a) || (c >= 0x61 && c <= 0x7a)) latin++
+  }
+  const total = han + kana + latin
+  if (total < 20) return null
+  const cjk = han + kana
+  if (cjk > 0 && kana >= 10 && kana / cjk >= 0.15) return 'ja'
+  if (han >= latin) return han > 0 ? 'zh' : 'en'
+  return 'en'
+}
+
+/**
+ * 语言 ↔ 默认音色的映射：优先选这些系统音色（iOS/macOS 与常见引擎的命名），
+ * 都不可用时退回该语言组内排序最优的音色（见 pickSupportedVoices）。
+ */
+export const DEFAULT_VOICE_NAMES: Record<TextLang, string[]> = {
+  zh: ['tingting', '婷婷', 'meijia', '美佳', 'xiaoxiao', '晓晓', 'huihui', '慧慧', 'yaoyao'],
+  en: ['samantha', 'daniel', 'karen', 'moira', 'serena', 'aria', 'jenny', 'zoe'],
+  ja: ['o-ren', 'oren', 'kyoko', 'otoya', 'hattori', 'nanami'],
+}
+
+function normalizeVoiceName(name: string): string {
+  return voiceBaseName(name).replace(/[^a-z0-9\u4e00-\u9fff]/g, '')
+}
+
+/** 按书籍语言挑默认音色；该语言没有任何可用音色时返回 null（由调用方回退通用音色） */
+export function pickDefaultVoiceForLang<T extends VoiceLike>(lang: TextLang, voices: T[]): T | null {
+  const label = languageLabel(lang)
+  const ofLang = voices.filter(v => voiceGroupLabel(v.lang) === label)
+  if (ofLang.length === 0) return null
+  for (const preferred of DEFAULT_VOICE_NAMES[lang]) {
+    const key = normalizeVoiceName(preferred)
+    const hit = ofLang.find(v => normalizeVoiceName(v.name).includes(key))
+    if (hit) return hit
+  }
+  return ofLang[0]
+}
+
+export interface BookVoiceChoice {
+  voice: VoiceLike | null
+  /** 该书语言没有任何可用音色、已回退到通用音色 */
+  fallback: boolean
+}
+
+/**
+ * 打开书籍时决定生效音色：
+ * 1. 本书已有手动选择且音色仍可用、语言匹配 → 保留手动选择；
+ * 2. 否则按书籍语言选默认音色（跨语言切书时因此自动切换）；
+ * 3. 该书语言没有可用音色 → 回退到当前音色或列表首个通用音色，并标记 fallback。
+ */
+export function resolveBookVoice(
+  bookLang: TextLang,
+  bookVoiceURI: string | null | undefined,
+  voices: VoiceLike[],
+  currentVoiceURI: string | null = null,
+): BookVoiceChoice {
+  const label = languageLabel(bookLang)
+  const languageVoices = voices.filter(v => voiceGroupLabel(v.lang) === label)
+  const manual = bookVoiceURI ? voices.find(v => v.voiceURI === bookVoiceURI) : null
+  // 本书有该语言音色时，只认可语言匹配的手动选择；没有该语言音色时，用户任选的回退音色也保留
+  if (manual && (languageVoices.length === 0 || voiceGroupLabel(manual.lang) === label)) {
+    return { voice: manual, fallback: false }
+  }
+  if (languageVoices.length > 0) {
+    return { voice: pickDefaultVoiceForLang(bookLang, voices), fallback: false }
+  }
+  if (voices.length === 0) return { voice: null, fallback: false }
+  const current = currentVoiceURI ? voices.find(v => v.voiceURI === currentVoiceURI) : null
+  return { voice: current ?? voices[0], fallback: true }
+}
 
 /**
  * 句子语言检测（为 TTS 选音色服务）：
