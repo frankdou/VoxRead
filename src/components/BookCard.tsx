@@ -1,8 +1,9 @@
-import { useEffect, useMemo } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { TriangleAlert, X } from 'lucide-react'
 import { repository } from '../adapters/indexeddb'
+import { coverCacheKey, getCachedCover, makeCoverDataUrl, setCachedCover } from '../lib/cover'
 import type { BookMeta } from '../types'
 
 interface Props {
@@ -10,14 +11,52 @@ interface Props {
   onDelete: (book: BookMeta) => void
 }
 
+// 迁移做去重，避免 StrictMode 双重 effect 或列表刷新时重复写库
+const migrating = new Set<string>()
+
 export default function BookCard({ book, onDelete }: Props) {
   const navigate = useNavigate()
   const progress = useLiveQuery(() => repository.getProgress(book.id), [book.id], null)
-  const coverUrl = useMemo(
-    () => (book.coverBlob ? URL.createObjectURL(book.coverBlob) : null),
-    [book.coverBlob],
-  )
-  useEffect(() => () => { if (coverUrl) URL.revokeObjectURL(coverUrl) }, [coverUrl])
+  const [coverUrl, setCoverUrl] = useState<string | null>(book.coverDataUrl ?? null)
+
+  // 新数据直接用持久化的 data URL；老数据（Blob）首次读取成功后懒迁移成字符串并清除 Blob。
+  // iOS WebKit 的 IndexedDB Blob 在同一会话内可能失效（重启浏览器才恢复），
+  // 所以优先用字符串，同一会话内再用内存缓存兜一次，任何失败都退回字母占位
+  useEffect(() => {
+    if (book.coverDataUrl) {
+      setCoverUrl(book.coverDataUrl)
+      return
+    }
+    const blob = book.coverBlob
+    if (!(blob instanceof Blob) || blob.size === 0) {
+      setCoverUrl(null)
+      return
+    }
+    const cacheKey = coverCacheKey(book.id, blob)
+    const cached = getCachedCover(cacheKey)
+    if (cached) {
+      setCoverUrl(cached)
+      return
+    }
+    let cancelled = false
+    makeCoverDataUrl(blob).then(url => {
+      if (url) {
+        // 成功读到数据后立刻缓存并迁移；即使本次 effect 已被 StrictMode 取消，
+        // 迁移仍然有价值（封面内容对同一本书是稳定的）
+        setCachedCover(cacheKey, url)
+        if (!cancelled) setCoverUrl(url)
+        if (!migrating.has(book.id)) {
+          migrating.add(book.id)
+          repository.updateBookCover(book.id, url).catch(() => migrating.delete(book.id))
+        }
+        return
+      }
+      if (!cancelled) setCoverUrl(getCachedCover(cacheKey))
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [book.id, book.coverDataUrl, book.coverBlob])
 
   const pct = book.totalChunks
     ? Math.min(100, Math.round((((progress?.chunkSeq ?? 0) + 1) / book.totalChunks) * 100))
@@ -31,7 +70,12 @@ export default function BookCard({ book, onDelete }: Props) {
         onClick={() => navigate(`/book/${book.id}`)}
       >
         {coverUrl ? (
-          <img src={coverUrl} alt={book.title} className="h-full w-full object-cover" />
+          <img
+            src={coverUrl}
+            alt={book.title}
+            className="h-full w-full object-cover"
+            onError={() => setCoverUrl(null)}
+          />
         ) : (
           <span className="flex h-full w-full items-center justify-center text-4xl font-bold text-white/90">
             {book.title.slice(0, 1)}

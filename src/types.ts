@@ -8,6 +8,9 @@ export interface BookMeta {
   totalChunks: number
   createdAt: number
   lastReadAt: number
+  /** 导入时渲染首页并压缩成的封面小图（data URL）；新数据只存这个，不再依赖 Blob */
+  coverDataUrl?: string
+  /** 历史数据遗留的封面 Blob；首次成功读取后会懒迁移成 coverDataUrl 并清除 */
   coverBlob?: Blob
   /** 解析质量警告（乱码 / 疑似双栏） */
   lowQuality?: boolean

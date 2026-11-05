@@ -22,6 +22,8 @@ export interface BookRepository {
   updateBookVoice(bookId: string, voiceURI: string | null): Promise<void>
   /** 回写历史书籍检测出的语言 */
   updateBookLanguage(bookId: string, language: TextLang): Promise<void>
+  /** 懒迁移：把历史封面 Blob 转成小图字符串并清除 Blob */
+  updateBookCover(bookId: string, coverDataUrl: string): Promise<void>
   deleteBook(bookId: string): Promise<void>
   getSettings(): Promise<Settings | null>
   saveSettings(s: Settings): Promise<void>

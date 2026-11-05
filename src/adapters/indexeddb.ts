@@ -5,6 +5,7 @@ import { ImportError, type BookRepository } from './repository'
 export { ImportError }
 import { extractBook } from '../lib/pdf'
 import { buildChunks } from '../lib/chunker'
+import { blobToDataUrl, makeCoverDataUrl } from '../lib/cover'
 import { detectBookLanguage, langTagToTextLang, type TextLang } from '../lib/voices'
 
 class VoxReadDB extends Dexie {
@@ -82,6 +83,11 @@ export const repository: BookRepository = {
       langTagToTextLang(result.language ?? '') ??
       detectBookLanguage(languageSample(result.paragraphs)) ??
       undefined
+    // 封面直接压成小图字符串持久化：iOS WebKit 的 IndexedDB Blob 在同一会话内可能失效，
+    // 展示时不再需要读 Blob；转换失败就留空，由卡片走字母占位
+    const coverDataUrl = result.coverBlob
+      ? ((await makeCoverDataUrl(result.coverBlob)) ?? undefined)
+      : undefined
     const meta: BookMeta = {
       id: uid(),
       title: result.title ?? file.name.replace(/\.pdf$/i, ''),
@@ -90,9 +96,9 @@ export const repository: BookRepository = {
       totalChunks: chunks.length,
       createdAt: Date.now(),
       lastReadAt: Date.now(),
-      coverBlob: result.coverBlob ?? undefined,
       lowQuality: result.garbled || result.doubleColumn,
       language,
+      coverDataUrl,
     }
     await db.transaction('rw', db.books, db.chunks, async () => {
       await db.books.add(meta)
@@ -125,6 +131,14 @@ export const repository: BookRepository = {
 
   async updateBookLanguage(bookId, language: TextLang) {
     await db.books.update(bookId, { language })
+  },
+
+  async updateBookCover(bookId, coverDataUrl) {
+    // 写字符串的同时删除历史 Blob，避免两份额外占用；迁移失败时卡片仍有兜底
+    await db.books.where('id').equals(bookId).modify(b => {
+      b.coverDataUrl = coverDataUrl
+      delete b.coverBlob
+    })
   },
 
   async deleteBook(bookId) {
@@ -188,15 +202,6 @@ export const repository: BookRepository = {
   },
 }
 
-function blobToDataUrl(b: Blob): Promise<string> {
-  return new Promise((res, rej) => {
-    const r = new FileReader()
-    r.onload = () => res(r.result as string)
-    r.onerror = rej
-    r.readAsDataURL(b)
-  })
-}
-
-async function dataUrlToBlob(u: string): Promise<Blob> {
-  return (await fetch(u)).blob()
+function dataUrlToBlob(u: string): Promise<Blob> {
+  return fetch(u).then(r => r.blob())
 }
