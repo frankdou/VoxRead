@@ -97,12 +97,13 @@ export default function Bookshelf() {
                 size={16}
                 className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"
               />
+              {/* iOS 在输入框字号 < 16px 聚焦时会自动放大页面，这里用 16px + leading-5 保持原有行高 */}
               <input
                 type="search"
                 value={search}
                 onChange={e => setSearch(e.target.value)}
                 placeholder={t('bookshelf.searchPlaceholder')}
-                className="w-full rounded-full bg-white py-2 pl-10 pr-4 text-sm shadow-sm outline-none placeholder:text-slate-400 focus:ring-2 focus:ring-indigo-500/50 dark:bg-slate-900"
+                className="w-full rounded-full bg-white py-2 pl-10 pr-4 text-[16px] leading-5 shadow-sm outline-none placeholder:text-slate-400 focus:ring-2 focus:ring-indigo-500/50 dark:bg-slate-900"
               />
             </div>
           </div>
